@@ -1,0 +1,49 @@
+# =====================================================================
+# Central Mosquitto broker - Central OT network (Architecture V2.2)
+# Rendered at container start into /mosquitto/runtime/mosquitto.conf.
+# Limits are sized for this lab's payloads; see docs/SECURITY_MODEL.md.
+# =====================================================================
+per_listener_settings false
+allow_anonymous false
+
+# ---- AuthN/AuthZ: Dynamic Security (default ACL access = deny x4) ----
+plugin /usr/lib/mosquitto_dynamic_security.so
+plugin_opt_config_file /mosquitto/data/dynamic-security.json
+
+# ---- Persistence & bounded sessions ----
+persistence true
+persistence_location /mosquitto/data/
+autosave_interval 30
+persistent_client_expiration 2h
+
+# ---- Resource limits (never unlimited) ----
+# max_packet_size supersedes the deprecated message_size_limit in Mosquitto 2.x.
+max_packet_size 16384
+max_queued_messages 20000
+max_queued_bytes 16777216
+max_inflight_messages 20
+max_keepalive 120
+
+# ---- Logging (stdout + $SYS/broker/log/# for the historian) ----
+log_dest stdout
+log_dest topic
+log_type error
+log_type warning
+log_type notice
+log_type information
+connection_messages true
+log_timestamp true
+log_timestamp_format %Y-%m-%dT%H:%M:%S
+sys_interval 10
+
+# ---- Single TLS listener (MQTT over TLS 1.2+ only; no 1883) ----
+listener 8883
+protocol mqtt
+# Listener-scoped limits (placing these globally makes Mosquitto 2.1 open an implicit 1883 listener)
+max_qos 1
+max_connections 64
+certfile /mosquitto/runtime/server.crt
+keyfile /mosquitto/runtime/server.key
+cafile /mosquitto/runtime/ca.crt
+tls_version tlsv1.2
+require_certificate false

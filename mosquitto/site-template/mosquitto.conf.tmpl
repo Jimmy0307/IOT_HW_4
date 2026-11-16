@@ -1,0 +1,80 @@
+# =====================================================================
+# Site Mosquitto broker for @SITE_ID@ - Site LAN (Architecture V2.2)
+# Rendered at container start; @BRIDGE_PASSWORD@ is substituted from a
+# secret file and only exists in the container's private runtime dir.
+# =====================================================================
+per_listener_settings false
+allow_anonymous false
+
+plugin /usr/lib/mosquitto_dynamic_security.so
+plugin_opt_config_file /mosquitto/data/dynamic-security.json
+
+persistence true
+persistence_location /mosquitto/data/
+autosave_interval 30
+persistent_client_expiration 2h
+
+# ---- Resource limits (store-and-forward queue sized for ~10 min outage) ----
+max_packet_size 16384
+max_queued_messages 5000
+max_queued_bytes 8388608
+max_inflight_messages 20
+max_keepalive 120
+
+log_dest stdout
+log_type error
+log_type warning
+log_type notice
+log_type information
+connection_messages true
+log_timestamp true
+log_timestamp_format %Y-%m-%dT%H:%M:%S
+sys_interval 10
+
+listener 8883
+protocol mqtt
+# Listener-scoped limits (placing these globally makes Mosquitto 2.1 open an implicit 1883 listener)
+max_qos 1
+max_connections 32
+certfile /mosquitto/runtime/server.crt
+keyfile /mosquitto/runtime/server.key
+cafile /mosquitto/runtime/ca.crt
+tls_version tlsv1.2
+require_certificate false
+
+# =====================================================================
+# Uplink bridge: @SITE_ID@ -> central-broker (MQTT 5 over verified TLS)
+# Explicit topic allowlist only - never '#'.
+# =====================================================================
+connection @SITE_ID@-uplink
+address central-broker:8883
+bridge_protocol_version mqttv50
+remote_clientid bridge-@SITE_ID@
+remote_username bridge-@SITE_ID@
+remote_password @BRIDGE_PASSWORD@
+bridge_cafile /mosquitto/runtime/ca.crt
+bridge_insecure false
+bridge_tls_version tlsv1.2
+cleansession false
+local_cleansession false
+bridge_session_expiry_interval 600
+bridge_max_packet_size 16384
+bridge_attempt_unsubscribe false
+bridge_outgoing_retain true
+keepalive_interval 20
+restart_timeout 2 15
+try_private false
+notifications true
+notifications_local_only false
+notification_topic orchid/v1/@SITE_ID@/gateway/bridge
+
+# Outbound (site -> central): telemetry, gateway telemetry, state, acks, health, alerts, events
+topic orchid/v1/@SITE_ID@/sensor/+/telemetry/+ out 1
+topic orchid/v1/@SITE_ID@/gateway/telemetry/+/+ out 1
+topic orchid/v1/@SITE_ID@/actuator/+/state out 1
+topic orchid/v1/@SITE_ID@/control/+/ack out 1
+topic orchid/v1/@SITE_ID@/gateway/heartbeat out 1
+topic orchid/v1/@SITE_ID@/alerts out 1
+topic orchid/v1/@SITE_ID@/events out 1
+# Inbound (central -> site): authorized control + mode/override commands only
+topic orchid/v1/@SITE_ID@/control/+/command in 1

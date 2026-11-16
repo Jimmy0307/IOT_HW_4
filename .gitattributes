@@ -1,0 +1,6 @@
+# Files are mounted into Linux containers: force LF everywhere.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.docx binary
+*.pdf binary
