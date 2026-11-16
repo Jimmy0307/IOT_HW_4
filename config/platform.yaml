@@ -1,0 +1,120 @@
+# Secure Orchid IoT Control Platform - canonical configuration (Architecture V2.2)
+#
+# IMPORTANT: Every numeric threshold below is a configurable LAB ASSUMPTION
+# chosen for this classroom lab. None of them is a real sensor datasheet value
+# or a horticultural standard. Items explicitly flagged `lab_assumption: true`
+# must never be presented as real hardware specifications.
+
+platform:
+  name: Secure Orchid IoT Control Platform
+  architecture_version: "V2.2"
+  mqtt_version: 5
+  topic_root: orchid/v1
+
+  timing:
+    telemetry_interval_seconds: 1.0      # simulator publish period
+    tick_seconds: 0.5                    # controller evaluation period
+    heartbeat_interval_seconds: 5
+    state_republish_seconds: 10          # refreshes observed_at on retained state
+    heartbeat_stale_seconds: 20          # central: heartbeat older => UNKNOWN
+    state_stale_seconds: 30              # central: actuator state older => STALE
+    telemetry_stale_seconds: 15          # central: latest validated value older => STALE
+
+  command:
+    default_ttl_seconds: 30
+    max_ttl_seconds: 300
+    dedup_cache_size: 2048
+    retry_backoff_seconds: 10            # re-assert period when observed != desired
+
+  sessions:                              # bounded MQTT 5 Session Expiry (never infinite)
+    controller_session_expiry_seconds: 120
+    historian_session_expiry_seconds: 3600
+    api_session_expiry_seconds: 0
+    bridge_session_expiry_seconds: 600
+    broker_persistent_client_expiration: 2h
+
+  payload_limits:                        # application-level (MQTT max_packet_size is in mosquitto conf)
+    max_telemetry_bytes: 1024
+    max_command_bytes: 2048
+    max_event_bytes: 4096
+    max_json_depth: 4
+
+  web:
+    jwt_ttl_seconds: 900
+    jwt_algorithm: HS256
+    login_rate_limit_per_minute: 10
+
+  audit:
+    max_detail_string_len: 512
+    max_detail_keys: 16
+    rate_limit:
+      normal_per_second: 5
+      normal_burst: 20
+      critical_per_second: 50
+      critical_burst: 200
+    queue:
+      normal_max: 2000
+      critical_max: 5000
+
+  historian:
+    raw_retention_rows: 50000
+    gateway_retention_rows: 200000
+    events_retention_rows: 50000
+    late_threshold_seconds: 10           # central_ingest - gateway_ingest > this => LATE (store-and-forward)
+
+# Defaults applied to every site (a site may override any key).
+site_defaults:
+  target_temperature: 20.0               # teacher requirement
+  target_humidity: 60.0                  # teacher requirement
+
+  sensor_contract:
+    temperature:
+      unit: C
+      min: -10.0
+      max: 50.0
+      lab_assumption: true               # NOT a real datasheet range
+      note: "Configurable lab capability range for a generic greenhouse air-temperature probe."
+    humidity:
+      unit: "%RH"
+      min: 0.0
+      max: 100.0
+      lab_assumption: false              # physical domain of relative humidity
+      note: "Physical domain 0..100 %RH."
+
+  stale_seconds: 10                      # sample older than this cannot drive control
+  future_skew_seconds: 5                 # device_ts may be at most this far in the future
+  frozen_seconds: 30                     # identical value for this long => FROZEN
+  frozen_min_samples: 10
+  max_delta_per_second:                  # lab assumption plausibility limits
+    temperature: 2.0
+    humidity: 10.0
+  spike_confirm_samples: 3               # consecutive mutually-consistent samples to accept a step change
+  confirmation:                          # N-of-M debounce before AUTO actuates
+    n: 3
+    m: 5
+  hysteresis:                            # band width; ON at target+h/2, OFF at target-h/2
+    temperature: 1.0
+    humidity: 4.0
+  manual_override_ttl_seconds: 300
+  failsafe_after_seconds: 20             # no control-eligible data this long => FAILSAFE
+  failsafe_outputs:
+    fan_group: "ON"
+    dehumidifier_group: "OFF"
+  interlock:
+    temperature_high: 32.0               # HARD_SAFETY_INTERLOCK forces fan_group ON
+    lab_assumption: true
+
+  sensors:
+    temp01: temperature
+    humidity01: humidity
+  actuator_groups:
+    fan_group: [fan01, fan02]
+    dehumidifier_group: [dehumidifier01, dehumidifier02]
+
+sites:
+  site01: { display_name: "Greenhouse 01" }
+  site02: { display_name: "Greenhouse 02" }
+  site03: { display_name: "Greenhouse 03" }
+  site04: { display_name: "Greenhouse 04" }
+  site05: { display_name: "Greenhouse 05" }
+  site06: { display_name: "Greenhouse 06" }
