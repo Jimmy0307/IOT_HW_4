@@ -1,0 +1,321 @@
+{
+  "generated": "2026-11-16T20:33:47+00:00",
+  "passed": 33,
+  "failed": 1,
+  "inconclusive": 0,
+  "browser_qa": "PASS",
+  "gates": [
+    {
+      "gate": "G01",
+      "requirement": "docker compose build",
+      "method": "`docker compose build` (all images)",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/verify_all/compose_build.log"
+      ]
+    },
+    {
+      "gate": "G02",
+      "requirement": "all required services healthy",
+      "method": "Docker healthchecks (TLS+auth MQTT probe, HTTP, heartbeat file)",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/verify_all/services_healthy.log"
+      ]
+    },
+    {
+      "gate": "G03",
+      "requirement": "HTTPS dashboard reachable",
+      "method": "CA-verified HTTPS GET / and API (Python ssl, hostname checked)",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g03-https-dashboard-reachable/"
+      ]
+    },
+    {
+      "gate": "G04",
+      "requirement": "no host-exposed MQTT ports",
+      "method": "`docker compose ps` publishers + host connect 1883/8883",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g04-no-host-exposed-mqtt-ports/"
+      ]
+    },
+    {
+      "gate": "G05",
+      "requirement": "MQTT TLS verified",
+      "method": "TLS handshake + SAN on every broker; wrong SNI rejected; 1883 closed",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g05-mqtt-tls-verified/"
+      ]
+    },
+    {
+      "gate": "G06",
+      "requirement": "anonymous denied",
+      "method": "MQTT5 CONNECT without credentials -> 0x87",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g06-anonymous-denied/"
+      ]
+    },
+    {
+      "gate": "G07",
+      "requirement": "wrong password denied",
+      "method": "wrong password / foreign identity -> 0x87",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g07-wrong-password-denied/"
+      ]
+    },
+    {
+      "gate": "G08",
+      "requirement": "correct identity accepted",
+      "method": "valid principal connects; allowed publish PUBACK 0x00",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g08-correct-identity-accepted/"
+      ]
+    },
+    {
+      "gate": "G09",
+      "requirement": "cross-site ACL denied",
+      "method": "PUBACK/SUBACK 0x87 for 11 cross-scope attempts; LAN isolation",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g09-cross-site-acl-denied/"
+      ]
+    },
+    {
+      "gate": "G10",
+      "requirement": "6 sites telemetry available",
+      "method": "fresh VALIDATED series x12 at central; heartbeats ONLINE",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g10-six-sites-telemetry-available/"
+      ]
+    },
+    {
+      "gate": "G11",
+      "requirement": "invalid sensor sample cannot control",
+      "method": "12 injected invalid classes while value=30 C; fans stay OFF",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g11-invalid-sensor-sample-cannot-control/"
+      ]
+    },
+    {
+      "gate": "G12",
+      "requirement": "stale sample cannot control",
+      "method": "stale/future device_ts with value=30 C; fans stay OFF",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g12-stale-sample-cannot-control/"
+      ]
+    },
+    {
+      "gate": "G13",
+      "requirement": "spike does not immediately actuate",
+      "method": "+15 C one-shot spike and 200 C sample; fans stay OFF",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g13-spike-does-not-immediately-actuate/"
+      ]
+    },
+    {
+      "gate": "G14",
+      "requirement": "temperature high -> fan group",
+      "method": "ramp to 23 C; both fans ON; AUTO ACK TEMP_HIGH at central",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g14-temperature-high-fan-group/"
+      ]
+    },
+    {
+      "gate": "G15",
+      "requirement": "humidity high -> dehumidifier group",
+      "method": "ramp to 68 %RH; both dehumidifiers ON; ACK",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g15-humidity-high-dehumidifier-group/"
+      ]
+    },
+    {
+      "gate": "G16",
+      "requirement": "group partial failure detected",
+      "method": "fan02 STUCK_OFF; ACK PARTIAL_FAILURE; CRITICAL alert; DEGRADED",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g16-group-partial-failure-detected/",
+        "evidence/generated/ui/ui_qa_result.json"
+      ]
+    },
+    {
+      "gate": "G17",
+      "requirement": "command ACK/state lifecycle",
+      "method": "central command -> bridge -> site -> ACK + retained observed state",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g17-command-ack-state-lifecycle/",
+        "evidence/generated/g26a-rbac-viewer-read-only-operator-command-end-to-en/"
+      ]
+    },
+    {
+      "gate": "G18",
+      "requirement": "expired queued command never executes",
+      "method": "consumer offline; broker expiry + app expires_at variants",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g18-expired-queued-command-never-executes/"
+      ]
+    },
+    {
+      "gate": "G19",
+      "requirement": "duplicate command idempotent",
+      "method": "same command_id x3 -> 1 APPLIED, 2 DUPLICATE",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g19-duplicate-command-idempotent/"
+      ]
+    },
+    {
+      "gate": "G20",
+      "requirement": "manual override arbitration",
+      "method": "override beats AUTO; HARD_SAFETY_INTERLOCK beats override",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g20-manual-override-arbitration/"
+      ]
+    },
+    {
+      "gate": "G21",
+      "requirement": "override TTL returns AUTO",
+      "method": "ttl 8 s -> AUTO; transitions in HMAC audit chain",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g21-override-ttl-returns-auto/"
+      ]
+    },
+    {
+      "gate": "G22",
+      "requirement": "central outage local control survives",
+      "method": "central broker stopped + site03 bridge net cut; local AUTO acts",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g22-central-outage-local-control-survives/"
+      ]
+    },
+    {
+      "gate": "G23",
+      "requirement": "recovery/store-forward works",
+      "method": "outage-window telemetry delivered after recovery (late=1)",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g23-recovery-store-forward-works/"
+      ]
+    },
+    {
+      "gate": "G24",
+      "requirement": "retained stale state not shown fresh",
+      "method": "controller frozen/killed; API+UI show STALE/OFFLINE",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g24-retained-stale-state-not-shown-fresh/",
+        "evidence/generated/ui/ui_qa_result.json"
+      ]
+    },
+    {
+      "gate": "G25",
+      "requirement": "log CRLF injection neutralized",
+      "method": "CR/LF + forged JSON line + ANSI -> one record, visible escapes",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g25-log-crlf-injection-neutralized/"
+      ]
+    },
+    {
+      "gate": "G26",
+      "requirement": "stored XSS neutralized",
+      "method": "API returns inert text; browser renders text, no script/dialog",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g26-stored-xss-neutralized/",
+        "evidence/generated/ui/ui_qa_result.json"
+      ]
+    },
+    {
+      "gate": "G27",
+      "requirement": "fake principal/severity rejected",
+      "method": "claims dropped; server principal/site/severity/ingest_ts",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g27-fake-principal-severity-rejected/"
+      ]
+    },
+    {
+      "gate": "G28",
+      "requirement": "log flood bounded",
+      "method": "3000 events -> rate limited, 5/5 critical kept, disk bounded",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g28-log-flood-bounded/"
+      ]
+    },
+    {
+      "gate": "G29",
+      "requirement": "logging outage does not stop control",
+      "method": "historian stopped + local log sink failing; control continues",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g29-logging-outage-does-not-stop-control/"
+      ]
+    },
+    {
+      "gate": "G30",
+      "requirement": "audit tampering detected",
+      "method": "verify_audit_chain.py PASS on snapshot; FAIL on edited/deleted copy",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g30-audit-tampering-detected/",
+        "evidence/generated/verify_all/audit_verify.log"
+      ]
+    },
+    {
+      "gate": "G31",
+      "requirement": "secret scan clean",
+      "method": "exact-value + pattern scan: repo, git history, evidence, container logs",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/verify_all/secret_scan.log"
+      ]
+    },
+    {
+      "gate": "G32",
+      "requirement": "oversized MQTT payload bounded",
+      "method": "64 KiB publish vs max_packet_size 16384 -> disconnect, broker alive",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/g32-oversized-mqtt-payload-bounded/"
+      ]
+    },
+    {
+      "gate": "G33",
+      "requirement": "frontend production build passes",
+      "method": "`npm run build` (tsc + vite) + vitest + lint:security",
+      "result": "PASS",
+      "evidence": [
+        "evidence/generated/verify_all/frontend_build.log"
+      ]
+    },
+    {
+      "gate": "G34",
+      "requirement": "test suite passes",
+      "method": "unit + integration + security + failure suites",
+      "result": "FAIL",
+      "evidence": [
+        "evidence/generated/verify_all/unit_tests.log",
+        "evidence/generated/verify_all/stack_tests.log"
+      ]
+    }
+  ]
+}

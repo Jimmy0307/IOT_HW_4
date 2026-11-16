@@ -1,0 +1,4 @@
+$ C:\Program Files\Python314\python.exe scripts/collect_evidence.py
+# started 2026-11-16T20:33:47+00:00 duration 0.1s exit 1
+
+{"passed": 33, "failed": 1, "inconclusive": 0, "browser_qa": "PASS"}

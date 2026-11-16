@@ -1,0 +1,17 @@
+$ C:\nvm4w\nodejs\npm.CMD test --silent
+# started 2026-11-16T20:22:10+00:00 duration 3.2s exit 0
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.8 [39m[90mD:/HW4_ORCHID_MQTT/services/frontend[39m
+
+ [32m✓[39m src/__tests__/status.test.ts [2m([22m[2m23 tests[22m[2m)[22m[90m 11[2mms[22m[39m
+ [32m✓[39m src/__tests__/format-validation.test.ts [2m([22m[2m37 tests[22m[2m)[22m[90m 10[2mms[22m[39m
+ [32m✓[39m src/__tests__/no-dangerous-html.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 6[2mms[22m[39m
+ [32m✓[39m src/__tests__/event-row-xss.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[90m 97[2mms[22m[39m
+ [32m✓[39m src/__tests__/site-views.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[90m 179[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m74 passed[39m[22m[90m (74)[39m
+[2m   Start at [22m 04:22:07
+[2m   Duration [22m 2.22s[2m (transform 699ms, setup 0ms, collect 1.53s, tests 302ms, environment 4.86s, prepare 609ms)[22m
+

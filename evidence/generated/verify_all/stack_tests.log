@@ -1,0 +1,85 @@
+$ C:\Program Files\Python314\python.exe -m pytest tests/security/test_stack_mqtt_security.py tests/integration/test_stack_control.py tests/security/test_stack_web_and_logs.py tests/failure/test_stack_faults.py -p no:cacheprovider -v --junitxml=D:\HW4_ORCHID_MQTT\evidence\generated\verify_all\stack-junit.xml
+# started 2026-11-16T20:32:59+00:00 duration 587.8s exit 1
+
+============================= test session starts =============================
+platform win32 -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0 -- C:\Program Files\Python314\python.exe
+rootdir: D:\HW4_ORCHID_MQTT
+configfile: pyproject.toml
+plugins: anyio-4.12.1
+collecting ... collected 31 items
+
+tests/security/test_stack_mqtt_security.py::test_g04_no_host_exposed_mqtt_ports PASSED [  3%]
+tests/security/test_stack_mqtt_security.py::test_g05_tls_verified_on_every_broker PASSED [  6%]
+tests/security/test_stack_mqtt_security.py::test_g06_anonymous_denied PASSED [  9%]
+tests/security/test_stack_mqtt_security.py::test_g07_wrong_password_denied PASSED [ 12%]
+tests/security/test_stack_mqtt_security.py::test_g08_correct_identity_accepted PASSED [ 16%]
+tests/security/test_stack_mqtt_security.py::test_g09_cross_site_acl_denied PASSED [ 19%]
+tests/security/test_stack_mqtt_security.py::test_g32_oversized_payload_bounded PASSED [ 22%]
+tests/integration/test_stack_control.py::test_g10_six_sites_online_and_aggregated PASSED [ 25%]
+tests/integration/test_stack_control.py::test_g14_temperature_high_turns_on_both_fans PASSED [ 29%]
+tests/integration/test_stack_control.py::test_g15_humidity_high_turns_on_both_dehumidifiers PASSED [ 32%]
+tests/integration/test_stack_control.py::test_g17_remote_command_ack_and_observed_state PASSED [ 35%]
+tests/integration/test_stack_control.py::test_g19_duplicate_command_is_idempotent PASSED [ 38%]
+tests/integration/test_stack_control.py::test_g20_override_beats_auto_and_interlock_beats_override PASSED [ 41%]
+tests/integration/test_stack_control.py::test_g21_override_ttl_returns_to_auto PASSED [ 45%]
+tests/integration/test_stack_control.py::test_blank_reason_command_is_rejected_and_controller_survives FAILED [ 48%]
+tests/security/test_stack_web_and_logs.py::test_g03_https_dashboard_and_api PASSED [ 51%]
+tests/security/test_stack_web_and_logs.py::test_rbac_and_operator_command_end_to_end PASSED [ 54%]
+tests/security/test_stack_web_and_logs.py::test_g24_retained_stale_state_not_shown_fresh PASSED [ 58%]
+tests/security/test_stack_web_and_logs.py::test_g25_crlf_injection PASSED [ 61%]
+tests/security/test_stack_web_and_logs.py::test_g26_stored_xss_api_returns_inert_text PASSED [ 64%]
+tests/security/test_stack_web_and_logs.py::test_g27_fake_principal_and_severity PASSED [ 67%]
+tests/security/test_stack_web_and_logs.py::test_g28_log_flood_bounded PASSED [ 70%]
+tests/security/test_stack_web_and_logs.py::test_g30_audit_tamper_detected PASSED [ 74%]
+tests/failure/test_stack_faults.py::test_g11_invalid_samples_never_drive_control PASSED [ 77%]
+tests/failure/test_stack_faults.py::test_g12_stale_and_future_samples_never_drive_control PASSED [ 80%]
+tests/failure/test_stack_faults.py::test_g13_single_spike_does_not_actuate PASSED [ 83%]
+tests/failure/test_stack_faults.py::test_g16_partial_group_failure PASSED [ 87%]
+tests/failure/test_stack_faults.py::test_g18_expired_queued_command_never_executes PASSED [ 90%]
+tests/failure/test_stack_faults.py::test_g22_central_outage_local_control_survives PASSED [ 93%]
+tests/failure/test_stack_faults.py::test_g23_recovery_and_store_and_forward PASSED [ 96%]
+tests/failure/test_stack_faults.py::test_g29_logging_outage_does_not_stop_control PASSED [100%]
+
+================================== FAILURES ===================================
+________ test_blank_reason_command_is_rejected_and_controller_survives ________
+
+evidence = <tests.lab.Evidence object at 0x0000025AF39C65B0>
+site_reset = ['site01']
+
+    @pytest.mark.gate("G19b", "malformed operator input cannot crash the controller")
+    def test_blank_reason_command_is_rejected_and_controller_survives(evidence, site_reset):
+        site = "site01"
+        site_reset.append(site)
+        lab.baseline(site)
+        started = lab.run(["docker", "inspect", "-f", "{{.State.StartedAt}} {{.RestartCount}}",
+                           f"orchid-{site}-controller"], record="controller start time before").stdout.strip()
+        body = lab.command_body("ON", reason="   ")
+        lab.send_command(site, "fan_group", body, record="command with whitespace-only reason")
+>       row = lab.wait_until(lambda: lab.db("SELECT status, detail FROM commands WHERE command_id=? AND status!='SENT'",
+                                            (body["command_id"],)), 30, desc="INVALID ack")
+
+tests\integration\test_stack_control.py:205: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+fn = <function test_blank_reason_command_is_rejected_and_controller_survives.<locals>.<lambda> at 0x0000025AF393A140>
+timeout = 30, interval = 1.0, desc = 'INVALID ack'
+
+    def wait_until(fn: Callable[[], Any], timeout: float, interval: float = 1.0, desc: str = "") -> Any:
+        deadline = time.monotonic() + timeout
+        last: Any = None
+        while time.monotonic() < deadline:
+            try:
+                last = fn()
+                if last:
+                    return last
+            except (AssertionError, KeyError, IndexError, ValueError) as exc:
+                last = exc
+            time.sleep(interval)
+>       raise AssertionError(f"timeout waiting for {desc or fn}: last={last!r}"[:2000])
+E       AssertionError: timeout waiting for INVALID ack: last=[]
+
+tests\lab.py:147: AssertionError
+- generated xml file: D:\HW4_ORCHID_MQTT\evidence\generated\verify_all\stack-junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/integration/test_stack_control.py::test_blank_reason_command_is_rejected_and_controller_survives
+================== 1 failed, 30 passed in 586.94s (0:09:46) ===================

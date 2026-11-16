@@ -1,0 +1,30 @@
+$ docker compose --profile test up -d lab-probe
+# started 2026-11-16T20:22:46+00:00 duration 0.7s exit 0
+
+ Container orchid-frontend Running 
+ Container orchid-site04-broker Running 
+ Container orchid-site02-broker Running 
+ Container orchid-site03-controller Running 
+ Container orchid-central-api Running 
+ Container orchid-site02-sim Running 
+ Container orchid-site06-controller Running 
+ Container orchid-site05-broker Running 
+ Container orchid-site03-broker Running 
+ Container orchid-historian Running 
+ Container orchid-site02-controller Running 
+ Container orchid-central-broker Running 
+ Container orchid-reverse-proxy Running 
+ Container orchid-site05-sim Running 
+ Container orchid-site01-controller Running 
+ Container orchid-site04-sim Running 
+ Container orchid-site06-sim Running 
+ Container orchid-site01-broker Running 
+ Container orchid-site06-broker Running 
+ Container orchid-site05-controller Running 
+ Container orchid-site01-sim Running 
+ Container orchid-site04-controller Running 
+ Container orchid-site03-sim Running 
+ Container orchid-lab-probe Creating 
+ Container orchid-lab-probe Created 
+ Container orchid-lab-probe Starting 
+ Container orchid-lab-probe Started 

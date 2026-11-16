@@ -1,0 +1,4 @@
+$ C:\nvm4w\nodejs\npm.CMD run -s lint:security
+# started 2026-11-16T20:35:09+00:00 duration 0.4s exit 0
+
+lint:security OK - scanned 30 files under src/, 0 dangerous patterns found.

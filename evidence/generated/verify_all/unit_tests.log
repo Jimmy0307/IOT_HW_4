@@ -1,0 +1,7 @@
+$ C:\Program Files\Python314\python.exe -m pytest tests/unit -q -p no:cacheprovider -W ignore::DeprecationWarning --junitxml=D:\HW4_ORCHID_MQTT\evidence\generated\verify_all\unit-junit.xml
+# started 2026-11-16T20:35:09+00:00 duration 13.2s exit 0
+
+........................................................................ [ 37%]
+........................................................................ [ 75%]
+................................................                         [100%]
+192 passed in 12.06s

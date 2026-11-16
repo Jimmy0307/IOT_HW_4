@@ -101,8 +101,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skip-ui", action="store_true")
     args = parser.parse_args(argv)
     OUT.mkdir(parents=True, exist_ok=True)
-    for old in (ROOT / "evidence" / "generated").glob("g[0-9]*"):
-        shutil.rmtree(old, ignore_errors=True)  # never mix evidence from different runs
+    # Never mix evidence from different runs, but never destroy the last run's evidence either:
+    # an interrupted run must leave the previous complete run inspectable.
+    gen = ROOT / "evidence" / "generated"
+    previous = gen / "_previous_run"
+    old_gates = list(gen.glob("g[0-9]*"))
+    if old_gates:
+        shutil.rmtree(previous, ignore_errors=True)
+        previous.mkdir(parents=True)
+        for old in old_gates:
+            shutil.move(str(old), str(previous / old.name))
+        for name in ("gate_summary.json", "verify_all"):
+            if (gen / name).exists():
+                shutil.copytree(gen / name, previous / name) if (gen / name).is_dir() \
+                    else shutil.copy2(gen / name, previous / name)
 
     step("config_validation", [PY, "-c", "import sys; sys.path.insert(0,'services'); "
                                "from orchid.core.config import load_config; c=load_config(); "

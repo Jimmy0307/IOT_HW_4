@@ -1,0 +1,4 @@
+$ C:\Program Files\Python314\python.exe scripts/verify_audit_chain.py --snapshot D:\HW4_ORCHID_MQTT\evidence\generated\raw\final-audit-snapshot.db
+# started 2026-11-16T20:33:45+00:00 duration 0.6s exit 0
+
+{"result": "PASS", "rows_checked": 207, "first_bad_index": null, "reason": "", "head_prefix": "e136f56c544bc3a9", "db": "final-audit-snapshot.db"}

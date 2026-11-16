@@ -1,0 +1,110 @@
+{
+  "base": "https://localhost:8443",
+  "tls_trust": "lab CA SPKI pinned for this browser instance only",
+  "generated": "2026-11-16T20:33:44.920Z",
+  "failed": 0,
+  "results": [
+    {
+      "check": "six site cards rendered",
+      "result": "PASS",
+      "detail": {
+        "cards": 6
+      },
+      "ts": "2026-11-16T20:33:01.344Z"
+    },
+    {
+      "check": "live telemetry changes",
+      "result": "PASS",
+      "detail": {
+        "before": "20.1\n°C\nNORMAL|56.0\n%RH\nNORMAL|20.8\n°C\nWARNING|59.7\n%RH\nNORMAL|20.7\n°C\nWARNING|65.8\n%RH\nWARNING|19.1\n°C\nNORMAL|57.6\n%RH\nNORMAL|20.5\n°C\nNORMAL|57.5\n%RH\nNORMAL|19.6\n°C\nNORMAL|64.1\n%RH\nWARNING",
+        "after": "20.2\n°C\nNORMAL|55.9\n%RH\nNORMAL|20.8\n°C\nWARNING|59.7\n%RH\nNORMAL|20.7\n°C\nWARNING|66.0\n%RH\nWARNING|19.1\n°C\nNORMAL|57.6\n%RH\nNORMAL|20.5\n°C\nWARNING|57.3\n%RH\nNORMAL|19.6\n°C\nNORMAL|64.1\n%RH\nWARNING"
+      },
+      "ts": "2026-11-16T20:33:05.939Z"
+    },
+    {
+      "check": "temperature high shows amber warning and fans ON",
+      "result": "PASS",
+      "detail": {
+        "fan": "ON",
+        "lvl": "warning"
+      },
+      "ts": "2026-11-16T20:33:06.407Z"
+    },
+    {
+      "check": "partial actuator failure shows DEGRADED",
+      "result": "PASS",
+      "detail": {
+        "status": "DEGRADED",
+        "level": "warning",
+        "alerts": "1",
+        "fan02": "OFF"
+      },
+      "ts": "2026-11-16T20:33:11.489Z"
+    },
+    {
+      "check": "frozen controller: retained state shown STALE (gray)",
+      "result": "PASS",
+      "detail": {
+        "fan": "STALE (last: ON)",
+        "lvl": "stale",
+        "status": "UNKNOWN"
+      },
+      "ts": "2026-11-16T20:33:31.884Z"
+    },
+    {
+      "check": "killed controller shows OFFLINE (red)",
+      "result": "PASS",
+      "detail": {
+        "status": "OFFLINE",
+        "level": "critical"
+      },
+      "ts": "2026-11-16T20:33:34.282Z"
+    },
+    {
+      "check": "XSS payload shown as literal text, no script/img element, no dialog",
+      "result": "PASS",
+      "detail": {
+        "found": true,
+        "scriptsInTable": 0,
+        "dialogs": 0
+      },
+      "ts": "2026-11-16T20:33:35.308Z"
+    },
+    {
+      "check": "security page shows audit integrity PASS",
+      "result": "PASS",
+      "detail": {
+        "audit": "PASS"
+      },
+      "ts": "2026-11-16T20:33:35.728Z"
+    },
+    {
+      "check": "security page shows connected sites",
+      "result": "PASS",
+      "detail": {},
+      "ts": "2026-11-16T20:33:35.730Z"
+    },
+    {
+      "check": "viewer has no control panel",
+      "result": "PASS",
+      "detail": {},
+      "ts": "2026-11-16T20:33:35.888Z"
+    },
+    {
+      "check": "operator command ACK shown in UI",
+      "result": "PASS",
+      "detail": {
+        "ack": "APPLIED"
+      },
+      "ts": "2026-11-16T20:33:41.352Z"
+    },
+    {
+      "check": "no browser console errors",
+      "result": "PASS",
+      "detail": {
+        "consoleErrors": []
+      },
+      "ts": "2026-11-16T20:33:43.101Z"
+    }
+  ]
+}

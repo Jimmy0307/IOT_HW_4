@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="31" time="586.804" timestamp="2026-11-17T04:23:12.828800+08:00" hostname="LAPTOP-B32NKOAR"><testcase classname="tests.security.test_stack_mqtt_security" name="test_g04_no_host_exposed_mqtt_ports" time="4.373" /><testcase classname="tests.security.test_stack_mqtt_security" name="test_g05_tls_verified_on_every_broker" time="10.504" /><testcase classname="tests.security.test_stack_mqtt_security" name="test_g06_anonymous_denied" time="1.525" /><testcase classname="tests.security.test_stack_mqtt_security" name="test_g07_wrong_password_denied" time="3.822" /><testcase classname="tests.security.test_stack_mqtt_security" name="test_g08_correct_identity_accepted" time="2.731" /><testcase classname="tests.security.test_stack_mqtt_security" name="test_g09_cross_site_acl_denied" time="9.917" /><testcase classname="tests.security.test_stack_mqtt_security" name="test_g32_oversized_payload_bounded" time="7.571" /><testcase classname="tests.integration.test_stack_control" name="test_g10_six_sites_online_and_aggregated" time="0.692" /><testcase classname="tests.integration.test_stack_control" name="test_g14_temperature_high_turns_on_both_fans" time="12.622" /><testcase classname="tests.integration.test_stack_control" name="test_g15_humidity_high_turns_on_both_dehumidifiers" time="10.865" /><testcase classname="tests.integration.test_stack_control" name="test_g17_remote_command_ack_and_observed_state" time="8.208" /><testcase classname="tests.integration.test_stack_control" name="test_g19_duplicate_command_is_idempotent" time="6.911" /><testcase classname="tests.integration.test_stack_control" name="test_g20_override_beats_auto_and_interlock_beats_override" time="30.757" /><testcase classname="tests.integration.test_stack_control" name="test_g21_override_ttl_returns_to_auto" time="27.484" /><testcase classname="tests.integration.test_stack_control" name="test_blank_reason_command_is_rejected_and_controller_survives" time="36.076"><failure message="AssertionError: timeout waiting for INVALID ack: last=[]">evidence = &lt;tests.lab.Evidence object at 0x0000025AF39C65B0&gt;
+site_reset = ['site01']
+
+    @pytest.mark.gate("G19b", "malformed operator input cannot crash the controller")
+    def test_blank_reason_command_is_rejected_and_controller_survives(evidence, site_reset):
+        site = "site01"
+        site_reset.append(site)
+        lab.baseline(site)
+        started = lab.run(["docker", "inspect", "-f", "{{.State.StartedAt}} {{.RestartCount}}",
+                           f"orchid-{site}-controller"], record="controller start time before").stdout.strip()
+        body = lab.command_body("ON", reason="   ")
+        lab.send_command(site, "fan_group", body, record="command with whitespace-only reason")
+&gt;       row = lab.wait_until(lambda: lab.db("SELECT status, detail FROM commands WHERE command_id=? AND status!='SENT'",
+                                            (body["command_id"],)), 30, desc="INVALID ack")
+
+tests\integration\test_stack_control.py:205: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+fn = &lt;function test_blank_reason_command_is_rejected_and_controller_survives.&lt;locals&gt;.&lt;lambda&gt; at 0x0000025AF393A140&gt;
+timeout = 30, interval = 1.0, desc = 'INVALID ack'
+
+    def wait_until(fn: Callable[[], Any], timeout: float, interval: float = 1.0, desc: str = "") -&gt; Any:
+        deadline = time.monotonic() + timeout
+        last: Any = None
+        while time.monotonic() &lt; deadline:
+            try:
+                last = fn()
+                if last:
+                    return last
+            except (AssertionError, KeyError, IndexError, ValueError) as exc:
+                last = exc
+            time.sleep(interval)
+&gt;       raise AssertionError(f"timeout waiting for {desc or fn}: last={last!r}"[:2000])
+E       AssertionError: timeout waiting for INVALID ack: last=[]
+
+tests\lab.py:147: AssertionError</failure></testcase><testcase classname="tests.security.test_stack_web_and_logs" name="test_g03_https_dashboard_and_api" time="10.480" /><testcase classname="tests.security.test_stack_web_and_logs" name="test_rbac_and_operator_command_end_to_end" time="10.896" /><testcase classname="tests.security.test_stack_web_and_logs" name="test_g24_retained_stale_state_not_shown_fresh" time="43.045" /><testcase classname="tests.security.test_stack_web_and_logs" name="test_g25_crlf_injection" time="1.100" /><testcase classname="tests.security.test_stack_web_and_logs" name="test_g26_stored_xss_api_returns_inert_text" time="5.400" /><testcase classname="tests.security.test_stack_web_and_logs" name="test_g27_fake_principal_and_severity" time="1.797" /><testcase classname="tests.security.test_stack_web_and_logs" name="test_g28_log_flood_bounded" time="19.156" /><testcase classname="tests.security.test_stack_web_and_logs" name="test_g30_audit_tamper_detected" time="0.771" /><testcase classname="tests.failure.test_stack_faults" name="test_g11_invalid_samples_never_drive_control" time="139.614" /><testcase classname="tests.failure.test_stack_faults" name="test_g12_stale_and_future_samples_never_drive_control" time="35.563" /><testcase classname="tests.failure.test_stack_faults" name="test_g13_single_spike_does_not_actuate" time="15.084" /><testcase classname="tests.failure.test_stack_faults" name="test_g16_partial_group_failure" time="15.209" /><testcase classname="tests.failure.test_stack_faults" name="test_g18_expired_queued_command_never_executes" time="57.844" /><testcase classname="tests.failure.test_stack_faults" name="test_g22_central_outage_local_control_survives" time="37.659" /><testcase classname="tests.failure.test_stack_faults" name="test_g23_recovery_and_store_and_forward" time="3.743" /><testcase classname="tests.failure.test_stack_faults" name="test_g29_logging_outage_does_not_stop_control" time="15.116" /></testsuite></testsuites>

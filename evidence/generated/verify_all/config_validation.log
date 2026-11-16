@@ -1,0 +1,5 @@
+$ C:\Program Files\Python314\python.exe -c import sys; sys.path.insert(0,'services'); from orchid.core.config import load_config; c=load_config(); print('sites', sorted(c.sites)); print('mqtt_version', c.platform.mqtt_version)
+# started 2026-11-16T20:34:54+00:00 duration 0.2s exit 0
+
+sites ['site01', 'site02', 'site03', 'site04', 'site05', 'site06']
+mqtt_version 5

@@ -66,8 +66,8 @@ padlock (or accept the warning for this local lab origin).
 ```bash
 python scripts/verify_all.py --fresh       # or: make verify-fresh
 ```
-Runs config validation, 170 unit tests, frontend lint/tests/build, compose build, health
-wait, 34 stack gates (integration, security, failure injection), Playwright browser QA, audit
+Runs config validation, 192 unit tests, frontend lint/tests/build, compose build, health
+wait, 31 stack tests covering the acceptance gates (integration, security, failure injection), Playwright browser QA, audit
 chain verification and a secret scan, then writes `evidence/generated/gate_summary.json` and
 `docs/TEST_MATRIX.md`. Unit tests alone: `python -m pytest tests/unit -q`.
 

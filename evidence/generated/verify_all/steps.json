@@ -1,0 +1,47 @@
+{
+  "updated": "2026-11-16T20:35:09+00:00",
+  "steps": {
+    "config_validation": {
+      "command": "C:\\Program Files\\Python314\\python.exe -c import sys; sys.path.insert(0,'services'); from orchid.core.config import load_config; c=load_config(); print('sites', sorted(c.sites)); print('mqtt_version', c.platform.mqtt_version)",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "finished": "2026-11-16T20:34:54+00:00",
+      "log": "evidence/generated/verify_all/config_validation.log"
+    },
+    "compose_render_check": {
+      "command": "C:\\Program Files\\Python314\\python.exe scripts/render_compose.py --check",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "finished": "2026-11-16T20:34:54+00:00",
+      "log": "evidence/generated/verify_all/compose_render_check.log"
+    },
+    "bootstrap_secrets": {
+      "command": "C:\\Program Files\\Python314\\python.exe scripts/bootstrap_secrets.py",
+      "exit_code": 0,
+      "duration_s": 1.2,
+      "finished": "2026-11-16T20:34:55+00:00",
+      "log": "evidence/generated/verify_all/bootstrap_secrets.log"
+    },
+    "compose_config": {
+      "command": "docker compose config --quiet",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "finished": "2026-11-16T20:34:56+00:00",
+      "log": "evidence/generated/verify_all/compose_config.log"
+    },
+    "unit_tests": {
+      "command": "C:\\Program Files\\Python314\\python.exe -m pytest tests/unit -q -p no:cacheprovider -W ignore::DeprecationWarning --junitxml=D:\\HW4_ORCHID_MQTT\\evidence\\generated\\verify_all\\unit-junit.xml",
+      "exit_code": 0,
+      "duration_s": 13.2,
+      "finished": "2026-11-16T20:35:09+00:00",
+      "log": "evidence/generated/verify_all/unit_tests.log"
+    },
+    "frontend_lint_security": {
+      "command": "C:\\nvm4w\\nodejs\\npm.CMD run -s lint:security",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "finished": "2026-11-16T20:35:09+00:00",
+      "log": "evidence/generated/verify_all/frontend_lint_security.log"
+    }
+  }
+}

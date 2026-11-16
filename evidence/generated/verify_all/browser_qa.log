@@ -1,0 +1,15 @@
+$ C:\Program Files\Python314\python.exe scripts/ui_qa.py
+# started 2026-11-16T20:33:44+00:00 duration 45.0s exit 0
+
+PASS  six site cards rendered
+PASS  live telemetry changes
+PASS  temperature high shows amber warning and fans ON
+PASS  partial actuator failure shows DEGRADED
+PASS  frozen controller: retained state shown STALE (gray)
+PASS  killed controller shows OFFLINE (red)
+PASS  XSS payload shown as literal text, no script/img element, no dialog
+PASS  security page shows audit integrity PASS
+PASS  security page shows connected sites
+PASS  viewer has no control panel
+PASS  operator command ACK shown in UI
+PASS  no browser console errors

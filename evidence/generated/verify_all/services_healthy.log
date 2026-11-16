@@ -1,0 +1,27 @@
+# 2026-11-16T20:22:52+00:00
+{
+ "central-api": "healthy",
+ "central-broker": "healthy",
+ "frontend": "healthy",
+ "historian": "healthy",
+ "lab-probe": "running",
+ "reverse-proxy": "healthy",
+ "site01-broker": "healthy",
+ "site01-controller": "healthy",
+ "site01-sim": "healthy",
+ "site02-broker": "healthy",
+ "site02-controller": "healthy",
+ "site02-sim": "healthy",
+ "site03-broker": "healthy",
+ "site03-controller": "healthy",
+ "site03-sim": "healthy",
+ "site04-broker": "healthy",
+ "site04-controller": "healthy",
+ "site04-sim": "healthy",
+ "site05-broker": "healthy",
+ "site05-controller": "healthy",
+ "site05-sim": "healthy",
+ "site06-broker": "healthy",
+ "site06-controller": "healthy",
+ "site06-sim": "healthy"
+}
