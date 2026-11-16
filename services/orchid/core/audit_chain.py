@@ -44,8 +44,8 @@ class VerifyResult:
     head: str = GENESIS
 
 
-def verify_chain(key: bytes, rows: Iterable[Mapping[str, Any]]) -> VerifyResult:
-    prev = GENESIS
+def verify_chain(key: bytes, rows: Iterable[Mapping[str, Any]], start: str = GENESIS) -> VerifyResult:
+    prev = start
     count = 0
     for index, row in enumerate(rows):
         count += 1

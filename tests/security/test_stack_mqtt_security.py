@@ -66,38 +66,55 @@ def test_g07_wrong_password_denied(evidence):
                         record=f"wrong password {user}@{host}")
         assert res["connected"] is False and res["reason_code"] == 135, res
     # an identity valid on one broker is unknown on another broker
-    res = lab.probe("connect", "--host", "site02-broker", "--user", "site01-temp01", record="site01 identity on site02")
+    res = lab.probe("connect", "--host", "site02-broker", "--user", "probe-site01-temp01",
+                    record="site01 identity on site02")
     assert res["connected"] is False, res
+    # client-id binding: the CORRECT password of a production principal is refused with a foreign client id,
+    # so a stolen credential cannot take over another principal's session
+    for host, user in (("central-broker", "historian"), ("central-broker", "bridge-site01"),
+                       ("site01-broker", "site01-controller")):
+        res = lab.probe("connect", "--host", host, "--user", user,
+                        record=f"correct password, foreign client id: {user}@{host}")
+        assert res["connected"] is False, res
+    health = lab.db("SELECT site, bridge_state, hb_status FROM site_status WHERE site='site01'",
+                    record="real bridge/controller sessions unaffected")
+    assert health[0]["bridge_state"] == "1"
 
 
 @pytest.mark.gate("G08", "correct identity accepted")
 def test_g08_correct_identity_accepted(evidence):
-    res = lab.probe("connect", "--host", "central-broker", "--user", "historian", record="historian@central")
+    res = lab.probe("connect", "--host", "central-broker", "--user", "probe-historian",
+                    record="historian-equivalent principal @central")
     assert res["connected"] is True
-    res = lab.probe("pub", "--host", "site01-broker", "--user", "site01-temp01",
+    res = lab.probe("pub", "--host", "site01-broker", "--user", "probe-site01-controller",
                     "--topic", "orchid/v1/site01/events",
                     "--payload", json.dumps({"event_id": "g08-ok", "event_type": "DIAGNOSTIC", "details": {}}),
-                    record="site01-temp01 publishes to an allowed topic")
+                    record="controller-equivalent principal publishes to an allowed topic")
     assert res["connected"] and res["puback_reason"] == 0, res
-    res = lab.probe("sub", "--host", "central-broker", "--user", "historian", "--topic", "orchid/v1/+/gateway/heartbeat",
-                    "--listen", "1", record="historian subscribes to allowed filter (retained heartbeats)")
+    res = lab.probe("sub", "--host", "central-broker", "--user", "probe-historian", "--topic",
+                    "orchid/v1/+/gateway/heartbeat", "--listen", "1",
+                    record="subscribes to allowed filter (retained heartbeats)")
     assert res["suback"] and res["suback"][0] < 0x80 and res["messages"], res
 
 
 @pytest.mark.gate("G09", "cross site acl denied")
 def test_g09_cross_site_acl_denied(evidence):
     cases = [
-        ("central-broker", "bridge-site01", "pub", "orchid/v1/site02/alerts"),
-        ("central-broker", "bridge-site01", "pub", "orchid/v1/site02/sensor/temp01/telemetry/temperature"),
-        ("central-broker", "bridge-site01", "pub", "orchid/v1/site01/control/fan_group/command"),
-        ("central-broker", "bridge-site01", "sub", "orchid/v1/site02/control/+/command"),
-        ("central-broker", "bridge-site01", "sub", "orchid/v1/#"),
-        ("central-broker", "central-api", "sub", "orchid/v1/#"),
-        ("site01-broker", "site01-temp01", "pub", "orchid/v1/site01/control/fan_group/command"),
-        ("site01-broker", "site01-temp01", "pub", "orchid/v1/site01/sensor/humidity01/telemetry/humidity"),
-        ("site01-broker", "site01-temp01", "pub", "orchid/v1/site01/alerts"),
-        ("site01-broker", "site01-temp01", "pub", "orchid/v1/site02/events"),
-        ("site01-broker", "site01-temp01", "sub", "orchid/v1/site01/control/+/command"),
+        ("central-broker", "probe-bridge-site01", "pub", "orchid/v1/site02/alerts"),
+        ("central-broker", "probe-bridge-site01", "pub", "orchid/v1/site02/sensor/temp01/telemetry/temperature"),
+        ("central-broker", "probe-bridge-site01", "pub", "orchid/v1/site01/control/fan_group/command"),
+        ("central-broker", "probe-bridge-site01", "pub", "orchid/v1/site01/actuator/rogue99/state"),
+        ("central-broker", "probe-bridge-site01", "sub", "orchid/v1/site02/control/+/command"),
+        ("central-broker", "probe-bridge-site01", "sub", "orchid/v1/#"),
+        ("central-broker", "probe-central-api", "sub", "orchid/v1/#"),
+        ("central-broker", "probe-historian", "pub", "orchid/v1/site01/control/fan_group/command"),
+        ("site01-broker", "probe-site01-temp01", "pub", "orchid/v1/site01/control/fan_group/command"),
+        ("site01-broker", "probe-site01-temp01", "pub", "orchid/v1/site01/sensor/humidity01/telemetry/humidity"),
+        ("site01-broker", "probe-site01-temp01", "pub", "orchid/v1/site01/alerts"),
+        ("site01-broker", "probe-site01-temp01", "pub", "orchid/v1/site01/events"),
+        ("site01-broker", "probe-site01-temp01", "pub", "orchid/v1/site02/events"),
+        ("site01-broker", "probe-site01-temp01", "sub", "orchid/v1/site01/control/+/command"),
+        ("site01-broker", "probe-site01-controller", "pub", "orchid/v1/site01/control/fan_group/command"),
     ]
     for host, user, op, topic in cases:
         args = [op, "--host", host, "--user", user, "--topic", topic, "--listen", "0.3"]
@@ -116,8 +133,9 @@ def test_g09_cross_site_acl_denied(evidence):
 
 @pytest.mark.gate("G32", "oversized mqtt payload bounded")
 def test_g32_oversized_payload_bounded(evidence):
-    for host, user, topic in (("site01-broker", "site01-temp01", "orchid/v1/site01/sensor/temp01/telemetry/temperature"),
-                              ("central-broker", "bridge-site01", "orchid/v1/site01/events")):
+    for host, user, topic in (("site01-broker", "probe-site01-temp01",
+                               "orchid/v1/site01/sensor/temp01/telemetry/temperature"),
+                              ("central-broker", "probe-bridge-site01", "orchid/v1/site01/events")):
         res = lab.probe("oversize", "--host", host, "--user", user, "--topic", topic, "--size", "65536",
                         record=f"64 KiB publish to {host} (max_packet_size 16384)")
         assert res["still_connected"] is False, res

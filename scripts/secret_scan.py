@@ -100,7 +100,7 @@ def main() -> int:
     stats["evidence_files_scanned"] = ev
 
     names = subprocess.run(["docker", "ps", "-a", "--filter", "name=orchid-", "--format", "{{.Names}}"],
-                           capture_output=True, text=True, env=ENV).stdout.split()
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", env=ENV).stdout.split()
     for name in names:
         proc = subprocess.run(["docker", "logs", name], capture_output=True, text=True, encoding="utf-8",
                               errors="replace", env=ENV)

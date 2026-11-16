@@ -10,7 +10,7 @@ import hashlib
 import hmac
 import time
 import uuid
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,7 +19,10 @@ import jwt
 ISSUER = "orchid-central-api"
 AUDIENCE = "orchid-dashboard"
 ROLES = ("viewer", "operator")
-_DUMMY_HASH = "pbkdf2_sha256$1000$" + base64.b64encode(b"0" * 16).decode() + "$" + base64.b64encode(b"0" * 32).decode()
+WEB_PBKDF2_ITERATIONS = 210000  # must match scripts/bootstrap_secrets.py
+_DUMMY_HASH = (f"pbkdf2_sha256${WEB_PBKDF2_ITERATIONS}$" + base64.b64encode(b"0" * 16).decode() + "$"
+               + base64.b64encode(b"0" * 32).decode())
+MAX_LIMITER_KEYS = 10000
 
 
 @dataclass(frozen=True)
@@ -83,18 +86,29 @@ class LoginRateLimiter:
 
     def __init__(self, per_minute: int) -> None:
         self.per_minute = per_minute
-        self._hits: dict[str, deque[float]] = defaultdict(deque)
+        self._hits: dict[str, deque[float]] = {}
+
+    def _purge(self, now: float) -> None:
+        for key in [k for k, w in self._hits.items() if not w or now - w[-1] > 60]:
+            del self._hits[key]
 
     def allow(self, *keys: str) -> bool:
+        """At capacity, expired windows are purged; if still full, NEW keys are refused (fail closed).
+        Existing windows are never evicted, so a key spray cannot reset an attacked key's counter."""
         now = time.monotonic()
         allowed = True
         for key in keys:
-            window = self._hits[key]
+            window = self._hits.get(key)
+            if window is None:
+                if len(self._hits) >= MAX_LIMITER_KEYS:
+                    self._purge(now)
+                if len(self._hits) >= MAX_LIMITER_KEYS:
+                    allowed = False
+                    continue
+                window = self._hits[key] = deque()
             while window and now - window[0] > 60:
                 window.popleft()
             if len(window) >= self.per_minute:
                 allowed = False
             window.append(now)
-        if len(self._hits) > 10000:
-            self._hits.clear()
         return allowed

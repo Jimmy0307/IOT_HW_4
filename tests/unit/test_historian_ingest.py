@@ -214,3 +214,85 @@ def test_broker_uptime_is_liveness_metric(env):
     ing.handle("$SYS/broker/uptime", b"1234 seconds")
     row = rows(db, "SELECT value FROM metrics WHERE key='broker_uptime_s'")
     assert row and float(row[0]["value"]) == 1234.0
+
+
+# ---------------- review findings (security + code review) ----------------
+CID = "2b4e28ba-2fa1-11d2-883f-0016d3cca427"
+
+
+def test_ack_cannot_forge_operator_or_cross_site_status(env):
+    ing, db, _ = env
+    forged = {"command_id": CID, "site_id": "site01", "group": "fan_group", "requested_state": "ON",
+              "result": "APPLIED", "members": {"fan01": "ON"}, "source": "REMOTE", "operator": "admin"}
+    ing.handle(topics.group_ack("site01", "fan_group"), json.dumps(forged).encode())
+    row = rows(db, "SELECT operator, detail FROM commands WHERE command_id=?", CID)[0]
+    assert row["operator"] is None and "unmatched" in row["detail"]
+    # a real central command for site02 cannot have its status overwritten by site01
+    cid2 = "3b4e28ba-2fa1-11d2-883f-0016d3cca427"
+    cmd = {"command_id": cid2, "issued_at": "2026-11-17T00:00:00Z", "expires_at": "2026-11-17T00:00:30Z",
+           "desired_state": "ON", "operator": "operator", "reason": "TEST"}
+    ing.handle(topics.group_command("site02", "fan_group"), json.dumps(cmd).encode())
+    ing.handle(topics.group_ack("site01", "fan_group"), json.dumps({**forged, "command_id": cid2}).encode())
+    row = rows(db, "SELECT site, status, operator FROM commands WHERE command_id=?", cid2)[0]
+    assert row == {"site": "site02", "status": "SENT", "operator": "operator"}
+
+
+@pytest.mark.parametrize("topic", [
+    topics.actuator_state("site01", "evilfan99"),
+    topics.telemetry("site01", "evil01", "temperature"),
+    topics.gateway_telemetry("site01", "evil01", "temperature"),
+])
+def test_unregistered_device_names_rejected(env, topic):
+    ing, db, _ = env
+    body = {"site_id": "site01", "device_id": topic.split("/")[4] if "/actuator/" in topic or "/sensor/" in topic
+            else "evil01", "metric": "temperature", "state": "ON", "value": 1.0}
+    ing.handle(topic, json.dumps(body).encode())
+    assert not rows(db, "SELECT * FROM actuator_state WHERE device_id LIKE 'evil%'")
+    assert not rows(db, "SELECT * FROM raw_telemetry WHERE device_id LIKE 'evil%'")
+    assert not rows(db, "SELECT * FROM validated_telemetry WHERE device_id LIKE 'evil%'")
+    assert rows(db, "SELECT * FROM events WHERE event_type='TOPIC_IDENTITY_MISMATCH'")
+
+
+def test_operator_audit_not_starved_by_site_critical_flood(env):
+    ing, db, _ = env
+    for i in range(500):
+        ing.handle(topics.events("site01"), event(event_id=f"c{i}", event_type="FAILSAFE_ENTERED"))
+    body = {"event_id": "op-1", "event_type": "OPERATOR_COMMAND", "details": {"site": "site01", "username": "operator"}}
+    ing.handle(topics.CENTRAL_AUDIT, json.dumps(body).encode())
+    assert rows(db, "SELECT * FROM events WHERE event_id='op-1'")
+
+
+def test_oversize_heartbeat_rejected_not_truncated(env):
+    ing, db, _ = env
+    hb = {"status": "ONLINE", "site_id": "site01", "health": "OK", "issues": ["é" * 600], "ts": "x"}
+    ing.handle(topics.heartbeat("site01"), json.dumps(hb, ensure_ascii=False).encode())
+    for r in rows(db, "SELECT heartbeat FROM site_status"):
+        json.loads(r["heartbeat"])  # anything stored must be valid JSON
+
+
+def test_event_and_audit_are_atomic(env, monkeypatch):
+    ing, db, _ = env
+    import orchid.historian.ingest as mod
+
+    def boom(*a, **k):
+        raise RuntimeError("disk full")
+    monkeypatch.setattr(mod, "chain_append", boom)
+    with db.transaction():
+        ing.handle(topics.events("site01"), event(event_id="atomic-1", event_type="MODE_CHANGED"))
+    assert not rows(db, "SELECT * FROM events WHERE event_id='atomic-1'")  # rolled back with its audit row
+    monkeypatch.undo()
+    ing.resync()
+    ing.handle(topics.events("site01"), event(event_id="atomic-1", event_type="MODE_CHANGED"))
+    assert rows(db, "SELECT * FROM events WHERE event_id='atomic-1'")
+    assert ing.verify_audit().ok
+
+
+def test_incremental_verification_detects_new_tampering(env, tmp_path):
+    ing, db, _ = env
+    for i in range(5):
+        ing.handle(topics.events("site02"), event(event_id=f"inc{i}", event_type="MODE_CHANGED"))
+    assert ing.verify_incremental().ok
+    for i in range(5, 8):
+        ing.handle(topics.events("site02"), event(event_id=f"inc{i}", event_type="MODE_CHANGED"))
+    res = ing.verify_incremental()
+    assert res.ok and res.checked == 3

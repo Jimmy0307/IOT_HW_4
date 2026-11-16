@@ -70,6 +70,7 @@ def broker_service(name: str, template: str, networks: list[str], secrets: list[
         "environment": env,
         "volumes": [ro(template, "/orchid/conf/mosquitto.conf.tmpl"), *secrets, f"{volume}:/mosquitto/data"],
         "networks": networks,
+        "read_only": True,
         "tmpfs": ["/mosquitto/runtime:size=4m,uid=1883,gid=1883,mode=0700"],
         **{**hardened("128m"), "cap_drop": ["ALL"], "cap_add": ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE", "FOWNER"]},
     }

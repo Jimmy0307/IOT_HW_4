@@ -36,6 +36,7 @@ SECRETS = ROOT / "secrets"
 MQTT_PBKDF2_ITERATIONS = 20000
 WEB_PBKDF2_ITERATIONS = 210000
 WEB_USERS = {"viewer": "viewer", "operator": "operator"}
+PROBE_SITES = ("site01", "site02")
 
 
 def _write_private(path: Path, data: str | bytes) -> None:
@@ -74,6 +75,8 @@ def web_password_hash(password: str) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rotate", action="store_true", help="regenerate all passwords, keys and certificates")
+    parser.add_argument("--no-test-principals", action="store_true",
+                        help="omit probe-* principals used only by the test-profile lab probe")
     args = parser.parse_args(argv)
     cfg = load_config()
     sites = sorted(cfg.sites)
@@ -81,9 +84,13 @@ def main(argv: list[str] | None = None) -> int:
     cert_args = [sys.executable, str(ROOT / "scripts" / "generate_certs.py")] + (["--force"] if args.rotate else [])
     subprocess.run(cert_args, check=True)
 
-    brokers: dict[str, list[acl_model.Principal]] = {"central": acl_model.central_principals(sites)}
-    for site in sites:
-        brokers[site] = acl_model.site_principals(site, cfg.sites[site].sensors)
+    with_probe = not args.no_test_principals
+    specs = {s: acl_model.SiteSpec(cfg.sites[s].sensors, cfg.sites[s].actuator_groups) for s in sites}
+    brokers: dict[str, list[acl_model.Principal]] = {
+        "central": acl_model.central_principals(specs, test_principals=with_probe)}
+    for site in sites:  # the lab probe sits on the site01/site02 LANs only
+        brokers[site] = acl_model.site_principals(site, cfg.sites[site].sensors,
+                                                  test_principals=with_probe and site in PROBE_SITES)
 
     created = 0
     passwords: dict[str, str] = {}
@@ -120,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         "brokers": {b: [p.username for p in ps] for b, ps in brokers.items()},
         "mqtt_principals": len(passwords),
         "mqtt_password_hash": f"PBKDF2-SHA512 x{MQTT_PBKDF2_ITERATIONS} ($7$)",
+        "test_principals": with_probe,
         "web_users": list(WEB_USERS),
         "note": "Manifest lists names only. No secret values.",
     }

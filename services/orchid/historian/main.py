@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from orchid.core import topics
+from orchid.core.acl_model import HISTORIAN_FILTERS
 from orchid.core.config import load_config
 from orchid.core.logjson import SafeJsonLogger
 from orchid.core.mqttc import MqttSettings, build_client, connect_async, read_secret
@@ -26,19 +28,19 @@ from orchid.historian.ingest import Ingestor
 
 DB_PATH = Path(os.environ.get("ORCHID_DB_PATH", "/data/historian.db"))
 HEALTH_FILE = Path("/tmp/orchid-health")
-SUBSCRIPTIONS = [
-    ("orchid/v1/+/sensor/+/telemetry/+", 1), ("orchid/v1/+/gateway/telemetry/+/+", 1),
-    ("orchid/v1/+/actuator/+/state", 1), ("orchid/v1/+/control/+/command", 1), ("orchid/v1/+/control/+/ack", 1),
-    ("orchid/v1/+/gateway/heartbeat", 1), ("orchid/v1/+/gateway/bridge", 1), ("orchid/v1/+/alerts", 1),
-    ("orchid/v1/+/events", 1), ("orchid/v1/central/audit", 1), ("$SYS/broker/log/#", 0),
-    ("$SYS/broker/uptime", 0), ("$SYS/broker/clients/connected", 0), ("$SYS/broker/load/messages/received/1min", 0),
-    ("$SYS/broker/load/messages/sent/1min", 0), ("$SYS/broker/load/connections/1min", 0),
-]
-NORMAL_SUFFIXES = ("/telemetry/temperature", "/telemetry/humidity", "/state", "/events")
+SUBSCRIPTIONS = list(HISTORIAN_FILTERS)  # identical to the historian's dynsec ACL
+NORMAL_KINDS = {"telemetry", "gateway_telemetry", "state", "events"}
+FULL_VERIFY_S = 600.0
+INCREMENTAL_VERIFY_S = 30.0
 
 
 def is_normal(topic: str) -> bool:
-    return topic.endswith(NORMAL_SUFFIXES) and not topic.startswith("$SYS")
+    """Critical lane: alerts, central audit, commands, acks, heartbeat, bridge state.
+    Normal lane: telemetry, gateway telemetry, state, site events, broker $SYS logs/metrics."""
+    if topic.startswith("$SYS/"):
+        return True
+    parsed = topics.parse(topic)
+    return parsed is not None and parsed.kind in NORMAL_KINDS
 
 
 class Historian:
@@ -97,40 +99,56 @@ class Historian:
         result = ing.verify_audit()
         self.log.info("AUDIT_CHAIN_STARTUP_CHECK", ok=result.ok, rows=result.checked)
         connect_async(self.client, self.settings)
-        last_periodic = last_prune = last_verify = 0.0
+        self.last_periodic = self.last_prune = self.last_verify = 0.0
+        self.last_full_verify = time.monotonic()
         while not self.stop.is_set():
-            if self._drain(ing, db) == 0:
-                time.sleep(0.05)
-            now = time.monotonic()
-            if now - last_periodic >= 2.0:
-                last_periodic = now
-                ts = iso(utcnow())
-                with db.transaction():
-                    ing.periodic()
-                    db.set_metric("queue_dropped_critical", self.dropped["critical"], ts)
-                    db.set_metric("queue_dropped_normal", self.dropped["normal"], ts)
-                    db.set_metric("historian_mqtt_connected", int(self.connected.is_set()), ts)
-                    db.set_metric("historian_heartbeat", ts, ts)
-                try:
-                    HEALTH_FILE.write_text(str(time.time()))
-                except OSError:
-                    pass
-            if now - last_prune >= 60.0:
-                last_prune = now
-                ing.prune()
-            if now - last_verify >= 30.0:
-                last_verify = now
-                res = ing.verify_audit()
-                ts = iso(utcnow())
-                db.set_metric("audit_integrity", "PASS" if res.ok else "FAIL", ts)
-                db.set_metric("audit_rows", res.checked, ts)
-                db.set_metric("audit_head", res.head[:16], ts)
-                if not res.ok:
-                    self.log.critical("AUDIT_CHAIN_BROKEN", index=res.first_bad_index, reason=res.reason)
+            try:
+                self._iteration(ing, db)
+            except Exception as exc:  # noqa: BLE001 - e.g. sqlite I/O error: keep running, resync chain head
+                self.log.error("HISTORIAN_LOOP_ERROR", error=type(exc).__name__, detail=str(exc)[:200])
+                ing.resync()
+                time.sleep(1.0)
         self.client.disconnect()
         self.client.loop_stop()
         db.close()
 
+    def _iteration(self, ing: Ingestor, db: HistorianDB) -> None:
+        if self._drain(ing, db) == 0:
+            time.sleep(0.05)
+        now = time.monotonic()
+        if now - self.last_periodic >= 2.0:
+            self.last_periodic = now
+            ts = iso(utcnow())
+            with db.transaction():
+                ing.periodic()
+                db.set_metric("queue_dropped_critical", self.dropped["critical"], ts)
+                db.set_metric("queue_dropped_normal", self.dropped["normal"], ts)
+                db.set_metric("historian_mqtt_connected", int(self.connected.is_set()), ts)
+                db.set_metric("historian_heartbeat", ts, ts)
+            try:
+                HEALTH_FILE.write_text(str(time.time()))
+            except OSError:
+                pass
+        if now - self.last_prune >= 60.0:
+            self.last_prune = now
+            ing.prune()
+        if now - self.last_verify >= INCREMENTAL_VERIFY_S:
+            self.last_verify = now
+            self._verify(ing, db, full=now - self.last_full_verify >= FULL_VERIFY_S)
+
+    def _verify(self, ing: Ingestor, db: HistorianDB, *, full: bool) -> None:
+        """Incremental (new rows only) every 30 s; full chain from genesis every 10 min."""
+        if full:
+            self.last_full_verify = time.monotonic()
+        res = ing.verify_audit() if full else ing.verify_incremental()
+        ts = iso(utcnow())
+        rows = db.query("SELECT COUNT(*) AS n FROM audit_log")[0]["n"]
+        db.set_metric("audit_integrity", "PASS" if res.ok else "FAIL", ts)
+        db.set_metric("audit_rows", rows, ts)
+        db.set_metric("audit_verify_mode", "full" if full else "incremental", ts)
+        db.set_metric("audit_head", res.head[:16], ts)
+        if not res.ok:
+            self.log.critical("AUDIT_CHAIN_BROKEN", index=res.first_bad_index, reason=res.reason)
 
 def main() -> int:
     hist = Historian()

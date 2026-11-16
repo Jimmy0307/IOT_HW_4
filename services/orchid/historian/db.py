@@ -68,6 +68,7 @@ class HistorianDB:
         self.con.row_factory = sqlite3.Row
         self._lock = threading.RLock()
         self._in_tx = False
+        self._depth = 0
 
     def close(self) -> None:
         self.con.close()
@@ -75,8 +76,19 @@ class HistorianDB:
     @contextmanager
     def transaction(self) -> Iterator[None]:
         with self._lock:
-            if self._in_tx:
-                yield
+            if self._in_tx:  # nested: SAVEPOINT so an inner failure rolls back only the inner unit
+                self._depth += 1
+                name = f"sp{self._depth}"
+                self.con.execute(f"SAVEPOINT {name}")
+                try:
+                    yield
+                    self.con.execute(f"RELEASE {name}")
+                except BaseException:
+                    self.con.execute(f"ROLLBACK TO {name}")
+                    self.con.execute(f"RELEASE {name}")
+                    raise
+                finally:
+                    self._depth -= 1
                 return
             self.con.execute("BEGIN IMMEDIATE")
             self._in_tx = True
@@ -101,8 +113,8 @@ class HistorianDB:
         row = self.query("SELECT hmac FROM audit_log ORDER BY seq DESC LIMIT 1")
         return row[0]["hmac"] if row else None
 
-    def audit_rows(self) -> Iterator[dict[str, Any]]:
-        cur = self.con.execute("SELECT * FROM audit_log ORDER BY seq")
+    def audit_rows(self, after_seq: int = 0) -> Iterator[dict[str, Any]]:
+        cur = self.con.execute("SELECT * FROM audit_log WHERE seq > ? ORDER BY seq", (after_seq,))
         for row in cur:
             yield dict(row)
 

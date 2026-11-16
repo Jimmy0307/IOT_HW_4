@@ -102,7 +102,7 @@ def test_g13_single_spike_does_not_actuate(evidence, site_reset):
     t0 = lab.iso(lab.now_utc())
     lab.sim(site, "POST", "/fault", {"device": "temp01", "fault": "spike"}, record="one-shot +15 C spike")
     # compromised device: physically impossible 200 C sample
-    lab.probe("pub", "--host", "site01-broker", "--user", "site01-temp01",
+    lab.probe("pub", "--host", "site01-broker", "--user", "probe-site01-temp01",
               "--topic", "orchid/v1/site01/sensor/temp01/telemetry/temperature", "--payload",
               json.dumps({"schema_version": "1.0", "site_id": "site01", "device_id": "temp01",
                           "device_ts": lab.iso(lab.now_utc()), "seq": 1, "metric": "temperature", "value": 200.0,

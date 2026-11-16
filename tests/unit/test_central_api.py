@@ -159,6 +159,7 @@ def test_operator_command_published_with_expiry(api, cfg):
     {"group": "../../#", "desired_state": "ON", "reason": "x"},
     {"group": "fan_group", "desired_state": "ON", "reason": "<script>"},
     {"group": "fan_group", "desired_state": "ON", "reason": "x", "ttl_seconds": 99999},
+    {"group": "fan_group", "desired_state": "ON", "reason": "   "},
 ])
 def test_command_input_validation(api, body):
     client, _, pub = api
@@ -205,3 +206,36 @@ def test_site_detail_and_system(api):
     assert client.get("/api/sites/nope", headers=headers).status_code == 404
     system = client.get("/api/system", headers=headers).json()
     assert {"broker", "security", "audit", "commands", "sites_connected"} <= set(system)
+
+
+def test_future_timestamps_are_not_fresh():
+    now = utcnow()
+    row = {"state": "ON", "observed_at": iso(now + timedelta(seconds=600)), "quality": "GOOD"}
+    assert status.actuator_view(row, site_status="ONLINE", now=now, stale_s=30)["display"] == "STALE"
+    hb = {"heartbeat": json.dumps({"status": "ONLINE", "health": "OK", "ts": iso(now + timedelta(seconds=600))}),
+          "bridge_state": "1"}
+    assert status.site_status(hb, now=now, stale_s=20) == "UNKNOWN"
+
+
+def test_corrupt_heartbeat_row_does_not_break_overview(api, tmp_path):
+    client, ing, _ = api
+    ing.db.execute("INSERT INTO site_status(site, heartbeat, hb_status) VALUES('site01', '{broken', 'ONLINE')")
+    headers = login(client, "viewer", "view-pw")
+    r = client.get("/api/overview", headers=headers)
+    assert r.status_code == 200
+    assert next(s for s in r.json()["sites"] if s["site_id"] == "site01")["status"] == "UNKNOWN"
+
+
+def test_unknown_user_costs_same_pbkdf2_work():
+    from orchid.central_api import auth
+    assert auth._DUMMY_HASH.split("$")[1] == "210000"
+
+
+def test_login_limiter_does_not_reset_under_key_spray():
+    from orchid.central_api.auth import LoginRateLimiter
+    lim = LoginRateLimiter(per_minute=3)
+    for _ in range(3):
+        assert lim.allow("ip:1.2.3.4")
+    for i in range(20000):
+        lim.allow(f"user:spray-{i}")
+    assert lim.allow("ip:1.2.3.4") is False

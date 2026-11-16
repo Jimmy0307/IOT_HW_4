@@ -128,7 +128,7 @@ async function main() {
     const evt = { event_id: marker, event_type: "DIAGNOSTIC",
       details: { message: `<script>alert('${marker}')</script><img src=x onerror=alert(1)>` } };
     sh("exec", "orchid-lab-probe", "python", "-m", "orchid.tools.probe", "pub", "--host", "site01-broker", "--user",
-      "site01-temp01", "--topic", "orchid/v1/site01/events", "--payload", JSON.stringify(evt));
+      "probe-site01-controller", "--topic", "orchid/v1/site01/events", "--payload", JSON.stringify(evt));
     await page.getByTestId("nav-system").click();
     await page.getByTestId("system-page").waitFor();
     const xss = await waitFor(async () => {

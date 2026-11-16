@@ -197,9 +197,6 @@ class Simulator:
         for device, client in self.clients.items():
             connect_async(client, self.settings[device])
         interval = self.cfg.platform.timing.telemetry_interval_seconds
-        boot = {"event_id": f"{self.site_id}-boot-{int(time.time())}", "event_type": "DIAGNOSTIC",
-                "ts": utcnow().isoformat(), "details": {"message": "field devices booted"}}
-        first = True
         last = time.monotonic()
         while not self.stop.is_set():
             time.sleep(max(0.0, interval - (time.monotonic() - last)))
@@ -214,9 +211,6 @@ class Simulator:
                         continue
                     client.publish(topics.telemetry(self.site_id, device, sensor.metric), payload, qos=0)
                     self.published += 1
-                if first and all(c.is_connected() for c in self.clients.values()):
-                    self.clients["temp01"].publish(topics.events(self.site_id), json.dumps(boot), qos=1)
-                    first = False
             try:
                 HEALTH_FILE.write_text(str(time.time()))
             except OSError:

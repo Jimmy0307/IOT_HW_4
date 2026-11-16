@@ -39,7 +39,7 @@ cat > "$RT/xdg/mosquitto_sub" <<EOF
 -u health
 -P $HEALTH_PW
 -V mqttv5
--i health-$$
+-i health
 EOF
 unset BRIDGE_PW HEALTH_PW
 

@@ -70,6 +70,8 @@ class RateLimitCfg(_Frozen):
     normal_burst: int = Field(gt=0)
     critical_per_second: float = Field(gt=0)
     critical_burst: int = Field(gt=0)
+    server_per_second: float = Field(default=5, gt=0)
+    server_burst: int = Field(default=50, gt=0)
 
 
 class QueueCfg(_Frozen):
@@ -88,6 +90,7 @@ class HistorianCfg(_Frozen):
     raw_retention_rows: int = Field(gt=0)
     gateway_retention_rows: int = Field(gt=0)
     events_retention_rows: int = Field(gt=0)
+    commands_retention_rows: int = Field(default=20000, gt=0)
     late_threshold_seconds: float = Field(gt=0)
 
 
@@ -150,6 +153,7 @@ class SiteConfig(_Frozen):
     confirmation: Confirmation
     hysteresis: dict[str, float]
     manual_override_ttl_seconds: int = Field(gt=0)
+    maintenance_ttl_seconds: int = Field(default=1800, gt=0, le=86400)
     failsafe_after_seconds: float = Field(gt=0)
     failsafe_outputs: dict[str, OnOff]
     maintenance_outputs: dict[str, OnOff] = Field(

@@ -32,6 +32,13 @@ class _CommandBase(BaseModel):
     def _uuid(cls, v: str) -> str:
         return str(uuid.UUID(v))
 
+    @field_validator("operator", "reason")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("must not be blank")
+        return v
+
     @field_validator("issued_at", "expires_at")
     @classmethod
     def _ts(cls, v: str) -> str:
@@ -62,6 +69,7 @@ class CommandGate:
         self.cfg = cfg
         self.limits = limits
         self._seen: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self.generation = 0  # increments on every remember(); drives persistence even when the LRU is full
 
     def __len__(self) -> int:
         return len(self._seen)
@@ -69,6 +77,7 @@ class CommandGate:
     def remember(self, command_id: str, ack: dict[str, Any]) -> None:
         self._seen[command_id] = ack
         self._seen.move_to_end(command_id)
+        self.generation += 1
         while len(self._seen) > self.cfg.dedup_cache_size:
             self._seen.popitem(last=False)
 

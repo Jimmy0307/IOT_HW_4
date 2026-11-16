@@ -163,8 +163,8 @@ def command_body(desired: str | None = None, *, ttl: float = 30, issued_offset: 
 
 
 def send_command(site: str, group: str, body: dict, *, expiry: int | None = None, record: str | None = None) -> dict:
-    """Publish as the central-api principal on the central broker (real central -> bridge -> site path)."""
-    args = ["pub", "--host", "central-broker", "--user", "central-api",
+    """Publish as probe-central-api (same ACL as central-api) on the central broker (real central -> bridge -> site path)."""
+    args = ["pub", "--host", "central-broker", "--user", "probe-central-api",
             "--topic", f"orchid/v1/{site}/control/{group}/command", "--payload", json.dumps(body)]
     if expiry:
         args += ["--expiry", str(expiry)]

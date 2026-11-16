@@ -187,6 +187,7 @@ services:
     - bridge04_net
     - bridge05_net
     - bridge06_net
+    read_only: true
     tmpfs:
     - /mosquitto/runtime:size=4m,uid=1883,gid=1883,mode=0700
     restart: unless-stopped
@@ -224,6 +225,7 @@ services:
     networks:
     - bridge01_net
     - site01_net
+    read_only: true
     tmpfs:
     - /mosquitto/runtime:size=4m,uid=1883,gid=1883,mode=0700
     restart: unless-stopped
@@ -323,6 +325,7 @@ services:
     networks:
     - bridge02_net
     - site02_net
+    read_only: true
     tmpfs:
     - /mosquitto/runtime:size=4m,uid=1883,gid=1883,mode=0700
     restart: unless-stopped
@@ -422,6 +425,7 @@ services:
     networks:
     - bridge03_net
     - site03_net
+    read_only: true
     tmpfs:
     - /mosquitto/runtime:size=4m,uid=1883,gid=1883,mode=0700
     restart: unless-stopped
@@ -521,6 +525,7 @@ services:
     networks:
     - bridge04_net
     - site04_net
+    read_only: true
     tmpfs:
     - /mosquitto/runtime:size=4m,uid=1883,gid=1883,mode=0700
     restart: unless-stopped
@@ -620,6 +625,7 @@ services:
     networks:
     - bridge05_net
     - site05_net
+    read_only: true
     tmpfs:
     - /mosquitto/runtime:size=4m,uid=1883,gid=1883,mode=0700
     restart: unless-stopped
@@ -719,6 +725,7 @@ services:
     networks:
     - bridge06_net
     - site06_net
+    read_only: true
     tmpfs:
     - /mosquitto/runtime:size=4m,uid=1883,gid=1883,mode=0700
     restart: unless-stopped

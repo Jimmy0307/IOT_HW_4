@@ -74,7 +74,7 @@ def wait_healthy(timeout: int = 300) -> int:
     last = ""
     while time.monotonic() < deadline:
         proc = subprocess.run(["docker", "compose", "ps", "--format", "json"], cwd=ROOT, env=ENV,
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
         services = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
         states = {s["Service"]: s.get("Health") or s.get("State") for s in services}
         last = json.dumps(states, indent=1)
@@ -94,6 +94,8 @@ def wait_healthy(timeout: int = 300) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):  # e.g. cp950 consoles cannot print tool output like U+2713
+        stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--fresh", action="store_true", help="remove containers AND volumes before starting")
     parser.add_argument("--skip-ui", action="store_true")

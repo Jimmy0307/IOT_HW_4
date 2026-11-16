@@ -62,7 +62,7 @@ class Store:
         st_rows = self.q("SELECT * FROM site_status WHERE site=?", (site_id,))
         st_row = st_rows[0] if st_rows else None
         site_state = status.site_status(st_row, now=now, stale_s=self.hb_stale)
-        hb = json.loads(st_row["heartbeat"]) if st_row and st_row.get("heartbeat") else {}
+        hb = status.heartbeat_of(st_row) or {}
         states = {r["device_id"]: r for r in self.q("SELECT * FROM actuator_state WHERE site=?", (site_id,))}
         actuators, groups = {}, {}
         for group in GROUPS:
@@ -134,7 +134,7 @@ class Store:
         st = self.q("SELECT heartbeat, hb_ingest_ts, bridge_state, bridge_ts FROM site_status WHERE site=?", (site_id,))
         gateway = {}
         if st:
-            gateway = {"heartbeat": json.loads(st[0]["heartbeat"]) if st[0]["heartbeat"] else None,
+            gateway = {"heartbeat": status.heartbeat_of(st[0]),
                        "heartbeat_age_s": status.age_seconds(st[0]["hb_ingest_ts"], now),
                        "bridge_state": st[0]["bridge_state"], "bridge_ts": st[0]["bridge_ts"]}
         return {**summary, "trend": trend, "sensor_quality": quality, "recent_commands": commands,

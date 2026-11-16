@@ -17,7 +17,7 @@ pytestmark = pytest.mark.stack
 RAW = lab.EVIDENCE / "raw"
 
 
-def publish_event(event: dict, *, user: str = "site01-temp01", record: str | None = None) -> dict:
+def publish_event(event: dict, *, user: str = "probe-site01-controller", record: str | None = None) -> dict:
     return lab.probe("pub", "--host", "site01-broker", "--user", user, "--topic", "orchid/v1/site01/events",
                      "--payload", json.dumps(event), record=record)
 
@@ -102,7 +102,7 @@ def test_g24_retained_stale_state_not_shown_fresh(evidence):
                       "group": stale["groups"]["fan_group"]})
         assert stale["actuators"]["fan01"]["state"] == "ON" and stale["actuators"]["fan01"]["fresh"] is False
         assert stale["status"] in ("UNKNOWN", "OFFLINE")
-        retained = lab.probe("sub", "--host", "central-broker", "--user", "historian", "--topic",
+        retained = lab.probe("sub", "--host", "central-broker", "--user", "probe-historian", "--topic",
                              f"orchid/v1/{site}/actuator/fan01/state", "--listen", "1",
                              record="broker still holds retained 'ON' (would mislead a naive UI)")
         assert retained["messages"] and retained["messages"][0]["retain"]
@@ -129,7 +129,7 @@ def test_g25_crlf_injection(evidence):
     forged = f"g25-forged-{uuid.uuid4().hex[:6]}"
     msg = f'sensor ok\r\n{{"event_id":"{forged}","event_type":"LOGIN_SUCCESS","principal":"admin"}}\n\x1b[31mRED'
     publish_event({"event_id": eid, "event_type": "DIAGNOSTIC", "details": {"message": msg}},
-                  record="device publishes event with CR/LF + forged JSON line + ANSI escape")
+                  record="compromised site gateway publishes event with CR/LF + forged JSON line + ANSI escape")
     rows = wait_event(eid)
     stored = json.loads(rows[0]["details"])["message"]
     evidence.add("stored event (single record, escapes visible)", "SQL events", 0, rows)
@@ -145,7 +145,7 @@ def test_g26_stored_xss_api_returns_inert_text(evidence):
     eid = f"g26-{uuid.uuid4().hex[:8]}"
     payload = '<script>alert(1)</script><img src=x onerror=alert(2)>'
     publish_event({"event_id": eid, "event_type": "DIAGNOSTIC", "details": {"message": payload}},
-                  record="device publishes XSS payload")
+                  record="compromised site gateway publishes XSS payload")
     wait_event(eid)
     token = lab.login("viewer")
     code, data = lab.api("GET", "/api/events?site=site01&limit=50", token=token)
@@ -165,7 +165,7 @@ def test_g27_fake_principal_and_severity(evidence):
     eid = f"g27-{uuid.uuid4().hex[:8]}"
     publish_event({"event_id": eid, "event_type": "ACTUATOR_FAILURE", "principal": "admin", "severity": "INFO",
                    "ingest_ts": "1999-01-01T00:00:00Z", "site": "site02", "details": {"message": "forged"}},
-                  record="device claims principal=admin severity=INFO site=site02")
+                  record="site claims principal=admin severity=INFO site=site02")
     rows = wait_event(eid)
     evidence.add("authoritative values from server", "SQL events", 0, rows)
     r = rows[0]
@@ -176,7 +176,7 @@ def test_g27_fake_principal_and_severity(evidence):
     evidence.add("claim drop recorded as SECURITY", "SQL events", 0, drop)
     assert drop[0]["severity"] == "SECURITY"
     publish_event({"event_id": f"{eid}-x", "event_type": "LOGIN_SUCCESS", "details": {}},
-                  record="device tries a server-only event type")
+                  record="site tries a server-only event type")
     lab.wait_until(lambda: lab.db("SELECT 1 FROM events WHERE event_type='EVENT_SCHEMA_REJECTED' AND details LIKE ?",
                                   ("%EVENT_TYPE_NOT_ALLOWED%",)), 20, desc="schema reject")
 
@@ -191,7 +191,7 @@ def test_g28_log_flood_bounded(evidence):
     size_before = lab.run(["docker", "exec", "orchid-historian", "du", "-sk", "/data"]).stdout.split()[0]
     t0 = time.monotonic()
     res = lab.dexec_json("orchid-lab-probe", ["python", "-m", "orchid.tools.probe", "publish-many", "--host",
-                                              "site01-broker", "--user", "site01-temp01", "--topic",
+                                              "site01-broker", "--user", "probe-site01-controller", "--topic",
                                               "orchid/v1/site01/events"],
                          input=json.dumps(flood + crit), record="3000 low-priority + 5 critical events", timeout=120)
     assert res["sent"] == 3005

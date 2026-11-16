@@ -99,7 +99,7 @@ def test_g17_remote_command_ack_and_observed_state(evidence, site_reset):
         "SELECT device_id, state, quality, observed_at FROM actuator_state WHERE site=? AND grp='fan_group'", (site,)))
         and all(x["state"] == "ON" for x in r) and r, 20, desc="observed state ON at central")
     evidence.add("observed actuator state (retained, with observed_at/quality)", "SQL actuator_state", 0, states)
-    retained = lab.probe("sub", "--host", "central-broker", "--user", "historian", "--topic",
+    retained = lab.probe("sub", "--host", "central-broker", "--user", "probe-historian", "--topic",
                          f"orchid/v1/{site}/actuator/+/state", "--listen", "1.5",
                          record="new subscriber receives RETAINED state")
     fan_msgs = [m for m in retained["messages"] if "/fan0" in m["topic"] and m["retain"]]
@@ -191,3 +191,24 @@ def test_g21_override_ttl_returns_to_auto(evidence, site_reset):
                    "event_type IN ('MODE_CHANGED','OVERRIDE_EXPIRED') AND ingest_ts >= ?", (site, t0),
                    record="same transitions in HMAC audit chain")
     assert len(audit) >= 3
+
+
+@pytest.mark.gate("G19b", "malformed operator input cannot crash the controller")
+def test_blank_reason_command_is_rejected_and_controller_survives(evidence, site_reset):
+    site = "site01"
+    site_reset.append(site)
+    lab.baseline(site)
+    started = lab.run(["docker", "inspect", "-f", "{{.State.StartedAt}} {{.RestartCount}}",
+                       f"orchid-{site}-controller"], record="controller start time before").stdout.strip()
+    body = lab.command_body("ON", reason="   ")
+    lab.send_command(site, "fan_group", body, record="command with whitespace-only reason")
+    row = lab.wait_until(lambda: lab.db("SELECT status, detail FROM commands WHERE command_id=? AND status!='SENT'",
+                                        (body["command_id"],)), 30, desc="INVALID ack")
+    evidence.add("site rejects it as INVALID", "SQL commands", 0, row)
+    assert row[0]["status"] == "INVALID"
+    after = lab.run(["docker", "inspect", "-f", "{{.State.StartedAt}} {{.RestartCount}}",
+                     f"orchid-{site}-controller"], record="controller start time after").stdout.strip()
+    assert after == started
+    st = lab.status(site)
+    assert st["mode"]["mode"] == "AUTO" and st["loop_errors"] == 0
+    assert st["groups"]["fan_group"]["members"] == {"fan01": "OFF", "fan02": "OFF"}

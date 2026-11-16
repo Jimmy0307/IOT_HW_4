@@ -11,6 +11,12 @@ from typing import Any
 
 from orchid.core.timeutil import parse_aware
 
+FUTURE_SKEW_S = 5.0  # a timestamp further in the future than this is untrustworthy, never "fresh"
+
+
+def is_fresh(age: float | None, stale_s: float) -> bool:
+    return age is not None and -FUTURE_SKEW_S <= age <= stale_s
+
 
 def age_seconds(ts: str | None, now: datetime) -> float | None:
     if not ts:
@@ -21,7 +27,7 @@ def age_seconds(ts: str | None, now: datetime) -> float | None:
         return None
 
 
-def _heartbeat(row: dict[str, Any] | None) -> dict[str, Any] | None:
+def heartbeat_of(row: dict[str, Any] | None) -> dict[str, Any] | None:
     if not row or not row.get("heartbeat"):
         return None
     try:
@@ -37,14 +43,14 @@ def site_status(row: dict[str, Any] | None, *, now: datetime, stale_s: float) ->
         return "UNKNOWN"
     if row.get("bridge_state") == "0":
         return "OFFLINE"  # central broker published the bridge's LWT: uplink lost
-    hb = _heartbeat(row)
+    hb = heartbeat_of(row)
     if hb is None:
         return "UNKNOWN"
     if hb.get("status") == "OFFLINE":
         return "OFFLINE"  # controller LWT or graceful shutdown
     age = age_seconds(hb.get("ts") or row.get("hb_ts"), now)
-    if age is None or age > stale_s:
-        return "UNKNOWN"  # cannot claim online with an old heartbeat
+    if not is_fresh(age, stale_s):
+        return "UNKNOWN"  # cannot claim online with an old (or future-dated) heartbeat
     return "DEGRADED" if hb.get("health") == "DEGRADED" else "ONLINE"
 
 
@@ -53,8 +59,7 @@ def actuator_view(row: dict[str, Any] | None, *, site_status: str, now: datetime
         return {"state": None, "display": "UNKNOWN", "fresh": False, "observed_at": None, "quality": None,
                 "age_s": None}
     age = age_seconds(row.get("observed_at"), now)
-    fresh = (site_status in ("ONLINE", "DEGRADED") and age is not None and age <= stale_s
-             and row.get("state") in ("ON", "OFF"))
+    fresh = site_status in ("ONLINE", "DEGRADED") and is_fresh(age, stale_s) and row.get("state") in ("ON", "OFF")
     display = row["state"] if fresh else "STALE"
     return {"state": row.get("state"), "display": display, "fresh": fresh, "observed_at": row.get("observed_at"),
             "quality": row.get("quality"), "commanded": row.get("commanded"), "age_s": age}
@@ -65,7 +70,7 @@ def reading_view(row: dict[str, Any] | None, *, now: datetime, stale_s: float, h
     if row is None:
         return {"value": None, "display": "UNKNOWN", "fresh": False, "level": "unknown", "age_s": None}
     age = age_seconds(row.get("gateway_ingest_ts"), now)
-    fresh = age is not None and age <= stale_s
+    fresh = is_fresh(age, stale_s)
     value = row.get("value")
     level = "normal"
     if value is not None:

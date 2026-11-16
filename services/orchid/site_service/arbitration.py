@@ -123,7 +123,8 @@ class ControlAuthority:
     def enter_maintenance(self, *, operator: str, reason: str, now: datetime, ttl_s: float | None) -> Maintenance:
         _require(operator, reason)
         before = self.effective_mode()
-        expires = now + timedelta(seconds=float(ttl_s)) if ttl_s else None
+        ttl = min(float(ttl_s), self.site.maintenance_ttl_seconds) if ttl_s else self.site.maintenance_ttl_seconds
+        expires = now + timedelta(seconds=float(ttl))
         self.maintenance = Maintenance(operator, reason, now, expires)
         self.override = None
         self.base_mode = "MAINTENANCE"

@@ -68,6 +68,13 @@ class Ingestor:
         self._last_summary = monotonic()
         self._dedup: OrderedDict[tuple[str, str], None] = OrderedDict()
         self._prev = db.last_hmac() or GENESIS
+        self.retention_limits["commands"] = h.commands_retention_rows
+        self._verified_seq, self._verified_hmac = 0, GENESIS
+
+    def resync(self) -> None:
+        """After a failed/rolled-back batch: reload the chain head and forget in-memory dedup state."""
+        self._prev = self.db.last_hmac() or GENESIS
+        self._dedup.clear()
 
     # ------------------------------------------------------------------ routing
     def handle(self, topic: str, raw: bytes) -> None:
@@ -88,6 +95,10 @@ class Ingestor:
         if parsed is None or parsed.site not in self.cfg.sites:
             self.counters["unknown_topic"] += 1
             return
+        if not self._registered(parsed):
+            self._security(parsed.site, _principal_for_site(parsed.site), "TOPIC_IDENTITY_MISMATCH",
+                           topic_kind=parsed.kind, device=parsed.device or "", detail="unregistered device/metric")
+            return
         handler = {
             "telemetry": self._raw_telemetry, "gateway_telemetry": self._gateway_telemetry,
             "state": self._state, "command": self._command, "ack": self._ack, "heartbeat": self._heartbeat,
@@ -95,16 +106,25 @@ class Ingestor:
         }[parsed.kind]
         handler(parsed, raw)
 
+    def _registered(self, parsed: topics.ParsedTopic) -> bool:
+        site = self.cfg.sites[parsed.site]
+        if parsed.kind in ("telemetry", "gateway_telemetry"):
+            return site.sensors.get(parsed.device or "") == parsed.metric
+        if parsed.kind == "state":
+            return parsed.device in site.all_actuators()
+        return True
+
     def _parse(self, raw: bytes, max_bytes: int) -> Any:
         return parse_json_bounded(raw, max_bytes=max_bytes, max_depth=self.limits.max_json_depth)
 
     # ------------------------------------------------------------------ events / audit
-    def _bucket(self, site: str, cls: str) -> TokenBucket:
-        key = (site, cls)
+    def _bucket(self, principal: str, site: str, cls: str) -> TokenBucket:
+        key = (principal, site, cls)  # per principal: a site flood cannot starve central-api audit records
         if key not in self._buckets:
             rl = self.audit_cfg.rate_limit
-            rate, burst = ((rl.critical_per_second, rl.critical_burst) if cls != "normal"
-                           else (rl.normal_per_second, rl.normal_burst))
+            rate, burst = {"normal": (rl.normal_per_second, rl.normal_burst),
+                           "server": (rl.server_per_second, rl.server_burst)}.get(
+                cls, (rl.critical_per_second, rl.critical_burst))
             self._buckets[key] = TokenBucket(rate, burst, clock=self.monotonic)
         return self._buckets[key]
 
@@ -112,7 +132,7 @@ class Ingestor:
                event_id: str | None = None, claimed_ts: str | None = None, rate_class: str | None = None) -> bool:
         severity = severity_for(event_type)
         cls = rate_class or ("critical" if is_critical(severity) else "normal")
-        if cls != "exempt" and not self._bucket(site, cls).allow():
+        if cls != "exempt" and not self._bucket(principal, site, cls).allow():
             self._dropped[site] += 1
             self.counters["rate_limited"] += 1
             return False
@@ -145,7 +165,7 @@ class Ingestor:
         self.counters[f"severity_{severity}"] += 1
         return True
 
-    def _remember(self, key: tuple[str, str]) -> None:
+    def _remember(self, key: tuple[str, str]) -> None:  # noqa: D401
         self._dedup[key] = None
         while len(self._dedup) > DEDUP_LRU:
             self._dedup.popitem(last=False)
@@ -299,12 +319,16 @@ class Ingestor:
             return
         if not self._identity_ok(parsed, obj):
             return
+        stored = json.dumps(obj, ensure_ascii=True)
+        if len(stored) > 2048:  # never truncate JSON (would corrupt it); reject instead
+            self.counters["heartbeat_oversize"] += 1
+            return
         status = neutralize_text(str(obj.get("status", "UNKNOWN")), 16)
         self.db.execute(
             "INSERT INTO site_status(site, heartbeat, hb_status, hb_ts, hb_ingest_ts) VALUES(?,?,?,?,?) "
             "ON CONFLICT(site) DO UPDATE SET heartbeat=excluded.heartbeat, hb_status=excluded.hb_status, "
             "hb_ts=excluded.hb_ts, hb_ingest_ts=excluded.hb_ingest_ts",
-            (parsed.site, json.dumps(obj, ensure_ascii=True)[:2048], status,
+            (parsed.site, stored, status,
              neutralize_text(str(obj.get("ts", "")), 40), iso(self.now())))
 
     def _bridge(self, parsed: topics.ParsedTopic, raw: bytes) -> None:
@@ -333,6 +357,8 @@ class Ingestor:
              t("issued_at", 40), t("expires_at", 40), "SENT", now, now))
 
     def _ack(self, parsed: topics.ParsedTopic, raw: bytes) -> None:
+        """ACKs update a central command row; they can never set operator/reason of a central command
+        or touch another site's command (provenance comes from the central-published command)."""
         try:
             obj = self._parse(raw, self.limits.max_command_bytes)
         except PayloadError:
@@ -342,25 +368,38 @@ class Ingestor:
         t = lambda k, n=64: neutralize_text(str(obj.get(k) or ""), n)  # noqa: E731
         cid = t("command_id", 40) or f"unknown-{uuid.uuid4()}"
         result = t("result", 24)
+        source = t("source", 32)
         members = obj.get("members") if isinstance(obj.get("members"), dict) else {}
         members_json = json.dumps({neutralize_text(str(k), 24): neutralize_text(str(v), 8)
                                    for k, v in list(members.items())[:4]})
-        requested = t("requested_state", 8) if parsed.group != "mode" else t("requested_mode", 24)
         now = iso(self.now())
+        existing = self.db.query("SELECT site FROM commands WHERE command_id=?", (cid,))
+        if existing and existing[0]["site"] != parsed.site:
+            self._security(parsed.site, _principal_for_site(parsed.site), "TOPIC_IDENTITY_MISMATCH",
+                           topic_kind="ack", detail="ack for another site's command")
+            return
         if result == "DUPLICATE":
-            self.db.execute("UPDATE commands SET detail=?, updated_ts=? WHERE command_id=?",
-                            ("duplicate delivery ignored (idempotent)", now, cid))
+            self.db.execute("UPDATE commands SET detail=?, updated_ts=? WHERE command_id=? AND site=?",
+                            ("duplicate delivery ignored (idempotent)", now, cid, parsed.site))
             self.counters["acks_duplicate"] += 1
             return
-        self.db.execute(
-            "INSERT INTO commands(command_id, site, grp, requested, operator, reason, status, detail, members, source, "
-            "mode, acked_at, created_ts, updated_ts) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
-            "ON CONFLICT(command_id) DO UPDATE SET status=excluded.status, detail=excluded.detail, "
-            "members=excluded.members, source=excluded.source, mode=excluded.mode, acked_at=excluded.acked_at, "
-            "updated_ts=excluded.updated_ts",
-            (cid, parsed.site, parsed.group, requested, t("operator"), t("reason"), result, t("detail", 120),
-             members_json, t("source", 32), t("mode", 24), t("acked_at", 40), now, now))
+        if existing:
+            self.db.execute(
+                "UPDATE commands SET status=?, detail=?, members=?, source=?, mode=?, acked_at=?, updated_ts=? "
+                "WHERE command_id=? AND site=?",
+                (result, t("detail", 120), members_json, source, t("mode", 24), t("acked_at", 40), now, cid,
+                 parsed.site))
+        else:
+            remote = source == "REMOTE"
+            requested = t("requested_state", 8) if parsed.group != "mode" else t("requested_mode", 24)
+            detail = ("unmatched ack: no central command record" if remote else t("detail", 120)) or None
+            self.db.execute(
+                "INSERT INTO commands(command_id, site, grp, requested, operator, reason, status, detail, members, "
+                "source, mode, acked_at, created_ts, updated_ts) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cid, parsed.site, parsed.group, requested, None, None if remote else t("reason"), result, detail,
+                 members_json, source, t("mode", 24), t("acked_at", 40), now, now))
         self.counters[f"acks_{result.lower()}"] += 1
+
 
     # ------------------------------------------------------------------ housekeeping
     def periodic(self) -> None:
@@ -377,14 +416,33 @@ class Ingestor:
             self.db.set_metric(f"ingest_{key}", value, ts)
 
     def prune(self) -> None:
-        for table, keep in self.retention_limits.items():
-            row = self.db.query(f"SELECT MAX(id) AS m FROM {table}")  # noqa: S608 - fixed table names
+        for table, keep in self.retention_limits.items():  # audit_log is never pruned
+            col = "rowid" if table == "commands" else "id"
+            row = self.db.query(f"SELECT MAX({col}) AS m FROM {table}")  # noqa: S608 - fixed identifiers
             top = row[0]["m"] if row else None
             if top is not None and top > keep:
-                self.db.execute(f"DELETE FROM {table} WHERE id <= ?", (top - keep,))  # noqa: S608
+                self.db.execute(f"DELETE FROM {table} WHERE {col} <= ?", (top - keep,))  # noqa: S608
 
     def verify_audit(self) -> VerifyResult:
-        return self.verify_db(self.db, self.key)
+        """Full verification from genesis (startup + periodic); resets the incremental checkpoint."""
+        res = self.verify_db(self.db, self.key)
+        if res.ok:
+            last = self.db.query("SELECT MAX(seq) AS s FROM audit_log")[0]["s"] or 0
+            self._verified_seq, self._verified_hmac = last, res.head
+        return res
+
+    def verify_incremental(self) -> VerifyResult:
+        """Verify only rows appended since the last verified checkpoint (O(new rows))."""
+        def rows():
+            for r in self.db.audit_rows(after_seq=self._verified_seq):
+                r = dict(r)
+                r["details"] = json.loads(r["details"])
+                yield r
+        materialized = list(rows())
+        res = verify_chain(self.key, materialized, start=self._verified_hmac)
+        if res.ok and materialized:
+            self._verified_seq, self._verified_hmac = materialized[-1]["seq"], res.head
+        return res
 
     @staticmethod
     def verify_db(db: HistorianDB, key: bytes) -> VerifyResult:

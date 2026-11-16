@@ -76,5 +76,8 @@ topic orchid/v1/@SITE_ID@/control/+/ack out 1
 topic orchid/v1/@SITE_ID@/gateway/heartbeat out 1
 topic orchid/v1/@SITE_ID@/alerts out 1
 topic orchid/v1/@SITE_ID@/events out 1
-# Inbound (central -> site): authorized control + mode/override commands only
-topic orchid/v1/@SITE_ID@/control/+/command in 1
+# Inbound (central -> site): authorized control + mode/override commands only (concrete topics,
+# matching the concrete central-side ACL of bridge-@SITE_ID@)
+topic orchid/v1/@SITE_ID@/control/fan_group/command in 1
+topic orchid/v1/@SITE_ID@/control/dehumidifier_group/command in 1
+topic orchid/v1/@SITE_ID@/control/mode/command in 1

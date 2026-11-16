@@ -258,3 +258,46 @@ def test_command_topic_qos_and_retain_contract(h):
             assert o.qos == 1 and not o.retain
         elif "/gateway/telemetry/" in o.topic:
             assert not o.retain
+
+
+@pytest.mark.parametrize("field", ["reason", "operator"])
+def test_blank_operator_or_reason_is_invalid_not_a_crash(h, field):
+    cid = h.command("fan_group", "ON", **{field: "   "})
+    ack = h.acks("fan_group")[-1]
+    assert ack["result"] == "INVALID"
+    assert h.group_observed("fan_group")["fan01"] == "OFF"
+    assert h.engine.snapshot(h.now)["mode"]["mode"] == "AUTO"
+
+
+def test_blank_reason_in_mode_command_is_invalid(h):
+    body = {"command_id": str(uuid.uuid4()), "issued_at": h.now.isoformat(),
+            "expires_at": (h.now + timedelta(seconds=30)).isoformat(), "mode": "MAINTENANCE",
+            "operator": "op1", "reason": " "}
+    h.out += h.engine.on_message(topics.mode_command(SITE), json.dumps(body).encode(), h.now)
+    assert h.engine.snapshot(h.now)["mode"]["mode"] == "AUTO"
+    assert [o.payload["result"] for o in h.out if o.topic == topics.mode_ack(SITE)] == ["INVALID"]
+
+
+def test_maintenance_without_ttl_gets_bounded_expiry(h, site_cfg):
+    h.mode("MAINTENANCE")
+    m = h.engine.snapshot(h.now)["mode"]["maintenance"]
+    assert m["expires_at"] is not None
+
+
+def test_retry_under_persistent_fault_does_not_spam_acks(h):
+    h.engine.set_actuator_fault("fan02", "STUCK_OFF")
+    h.step(21.5, 60.0, n=4)
+    first = len(h.acks("fan_group"))
+    h.step(21.5, 60.0, n=35)  # several retry periods
+    assert len(h.acks("fan_group")) == first  # retries re-drive outputs but do not emit new ACKs
+    assert h.engine.counters.get("actuation_retries", 0) >= 2
+
+
+def test_dedup_generation_changes_even_when_cache_full(cfg):
+    from orchid.site_service.commands import CommandGate
+    gate = CommandGate(cfg.platform.command, cfg.platform.payload_limits)
+    for i in range(cfg.platform.command.dedup_cache_size):
+        gate.remember(f"id-{i}", {})
+    before = gate.generation
+    gate.remember("one-more", {})
+    assert gate.generation == before + 1 and len(gate) == cfg.platform.command.dedup_cache_size

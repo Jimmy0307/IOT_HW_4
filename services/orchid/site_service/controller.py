@@ -27,6 +27,7 @@ from orchid.core.timeutil import utcnow
 from orchid.site_service.engine import Out, SiteEngine
 
 INBOUND_MAX = 5000
+COMMAND_QUEUE_MAX = 500
 HEALTH_FILE = Path("/tmp/orchid-health")
 DATA_DIR = Path(os.environ.get("ORCHID_DATA_DIR", "/data"))
 
@@ -38,6 +39,10 @@ class ControllerRunner:
         self.log = SafeJsonLogger(f"{site_id}-controller", str(DATA_DIR / "site-controller.log"))
         self.engine = SiteEngine(self.cfg, site_id, log=self.log)
         self.inbound: queue.Queue[tuple[str, bytes]] = queue.Queue(maxsize=INBOUND_MAX)
+        # Commands get their own queue, drained first, so a telemetry flood cannot delay or drop them.
+        self.commands: queue.Queue[tuple[str, bytes]] = queue.Queue(maxsize=COMMAND_QUEUE_MAX)
+        self.loop_errors = 0
+        self.publish_failures = 0
         self.control: queue.Queue[tuple[str, dict[str, Any], queue.Queue]] = queue.Queue(maxsize=100)
         self.inbound_dropped = 0
         self.connected = threading.Event()
@@ -72,8 +77,9 @@ class ControllerRunner:
         self.log.warning("MQTT_DISCONNECTED", reason=str(reason_code))
 
     def _on_message(self, client: Any, userdata: Any, msg: Any) -> None:
+        target = self.commands if msg.topic.endswith("/command") else self.inbound
         try:
-            self.inbound.put_nowait((msg.topic, bytes(msg.payload)))
+            target.put_nowait((msg.topic, bytes(msg.payload)))
         except queue.Full:
             self.inbound_dropped += 1
 
@@ -116,10 +122,23 @@ class ControllerRunner:
     def _publish(self, outs: list[Out]) -> None:
         for out in outs:
             try:
-                self.client.publish(out.topic, out.encode(), qos=out.qos, retain=out.retain,
-                                    properties=publish_properties(out.expiry))
+                info = self.client.publish(out.topic, out.encode(), qos=out.qos, retain=out.retain,
+                                           properties=publish_properties(out.expiry))
+                if info.rc != 0:  # e.g. MQTT_ERR_QUEUE_FULL while offline for a long time
+                    self.publish_failures += 1
             except Exception as exc:  # noqa: BLE001 - publishing failure must not stop control
+                self.publish_failures += 1
                 self.log.error("PUBLISH_FAILED", topic=out.topic, error=type(exc).__name__)
+
+    def _safe(self, fn: Any, *args: Any) -> list[Out]:
+        """No single message or tick may take the control loop down."""
+        try:
+            return fn(*args)
+        except Exception as exc:  # noqa: BLE001
+            self.loop_errors += 1
+            self.log.error("CONTROL_LOOP_ERROR", where=getattr(fn, "__name__", "?"), error=type(exc).__name__,
+                           detail=str(exc)[:200])
+            return []
 
     # ---------------- dedup persistence ----------------
     def _dedup_path(self) -> Path:
@@ -150,11 +169,14 @@ class ControllerRunner:
         tick_s = self.cfg.platform.timing.tick_seconds
         next_tick = time.monotonic()
         pending_startup: list[Out] | None = startup
+        saved_generation = self.engine.gate.generation
         while not self.stop.is_set():
-            commands_before = len(self.engine.gate)
+            while not self.commands.empty():
+                topic, payload = self.commands.get_nowait()
+                self._publish(self._safe(self.engine.on_message, topic, payload, utcnow()))
             try:
-                topic, payload = self.inbound.get(timeout=max(0.0, next_tick - time.monotonic()))
-                self._publish(self.engine.on_message(topic, payload, utcnow()))
+                topic, payload = self.inbound.get(timeout=max(0.0, min(0.1, next_tick - time.monotonic())))
+                self._publish(self._safe(self.engine.on_message, topic, payload, utcnow()))
             except queue.Empty:
                 pass
             while not self.control.empty():
@@ -167,15 +189,21 @@ class ControllerRunner:
                     reply.put_nowait(self._handle_control(action, body))
                 except (ValueError, KeyError) as exc:
                     reply.put_nowait({"error": str(exc)})
-            if len(self.engine.gate) != commands_before:
+            if self.engine.gate.generation != saved_generation:
+                saved_generation = self.engine.gate.generation
                 self._save_dedup()
             if time.monotonic() >= next_tick:
                 now = utcnow()
-                self._publish(self.engine.tick(now))
-                snap = self.engine.snapshot(now)
+                self._publish(self._safe(self.engine.tick, now))
+                try:
+                    snap = self.engine.snapshot(now)
+                except Exception:  # noqa: BLE001
+                    snap = {"error": "snapshot failed"}
                 snap["mqtt_connected"] = self.connected.is_set()
                 snap["inbound_dropped"] = self.inbound_dropped
                 snap["puback_denied"] = self.tracker.denied
+                snap["loop_errors"] = self.loop_errors
+                snap["publish_failures"] = self.publish_failures
                 self._status = snap
                 try:
                     HEALTH_FILE.write_text(str(time.time()))

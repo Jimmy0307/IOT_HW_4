@@ -52,6 +52,8 @@ platform:
       normal_burst: 20
       critical_per_second: 50
       critical_burst: 200
+      server_per_second: 5                # server-generated security records (e.g. broker auth failures)
+      server_burst: 50
     queue:
       normal_max: 2000
       critical_max: 5000
@@ -60,6 +62,7 @@ platform:
     raw_retention_rows: 50000
     gateway_retention_rows: 200000
     events_retention_rows: 50000
+    commands_retention_rows: 20000
     late_threshold_seconds: 10           # central_ingest - gateway_ingest > this => LATE (store-and-forward)
 
 # Defaults applied to every site (a site may override any key).
@@ -96,6 +99,7 @@ site_defaults:
     temperature: 1.0
     humidity: 4.0
   manual_override_ttl_seconds: 300
+  maintenance_ttl_seconds: 1800          # MAINTENANCE always expires (default when no ttl given)
   failsafe_after_seconds: 20             # no control-eligible data this long => FAILSAFE
   failsafe_outputs:
     fan_group: "ON"

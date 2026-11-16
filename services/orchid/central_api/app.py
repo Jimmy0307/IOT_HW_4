@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal, Protocol
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from orchid.central_api.auth import LoginRateLimiter, Principal, TokenService, UserStore
 from orchid.central_api.publisher import PublishError
@@ -35,6 +35,12 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+def _not_blank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("must not be blank")
+    return value
+
+
 class GroupCommandIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     group: Literal["fan_group", "dehumidifier_group"]
@@ -42,12 +48,16 @@ class GroupCommandIn(BaseModel):
     reason: str = Field(pattern=TEXT)
     ttl_seconds: int | None = Field(default=None, gt=0, le=300)
 
+    _reason = field_validator("reason")(classmethod(lambda cls, v: _not_blank(v)))
+
 
 class ModeCommandIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: Literal["AUTO", "MANUAL_OVERRIDE", "MAINTENANCE"]
     reason: str = Field(pattern=TEXT)
     ttl_seconds: int | None = Field(default=None, gt=0, le=86400)
+
+    _reason = field_validator("reason")(classmethod(lambda cls, v: _not_blank(v)))
 
 
 def create_app(cfg: Config, *, db_path: Path, users: dict[str, dict[str, str]], jwt_secret: str,

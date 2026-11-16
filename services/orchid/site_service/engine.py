@@ -240,6 +240,17 @@ class SiteEngine:
                                 source=source, reason=reason, command_id=command_id))
         return outs + self._result_alerts(group, res, now)
 
+    def _retry(self, group: str, desired: str, now: datetime) -> list[Out]:
+        """Re-drive outputs after a failed actuation. No new ACK/COMMAND_APPLIED (avoids event storms);
+        state is republished and alerts change only when the observed result changes."""
+        self.counters["actuation_retries"] = self.counters.get("actuation_retries", 0) + 1
+        res = self.bank.apply_group(group, desired)
+        gs = self.groups[group]
+        changed = res.result != gs["result"]
+        gs.update(result=res.result, members=res.members, last_attempt=now)
+        outs = [self._state_out(m, group, now) for m in self.site.actuator_groups[group]]
+        return outs + (self._result_alerts(group, res, now) if changed else [])
+
     def _ack(self, group: str, res: GroupResult, command_id: str, source: str, reason: str, now: datetime,
              operator: str | None = None) -> Out:
         payload = {"command_id": command_id, "site_id": self.site_id, "group": group,
@@ -315,13 +326,17 @@ class SiteEngine:
             return [ack, self._event("COMMAND_REJECTED", now, group=group, command_id=cmd.command_id,
                                      detail=refusal, operator=cmd.operator)]
         outs: list[Out] = []
-        if self.authority.base_mode != "MANUAL_OVERRIDE":
-            self.authority.enter_manual_override(operator=cmd.operator, reason=cmd.reason, now=now,
-                                                 ttl_s=self.site.manual_override_ttl_seconds,
-                                                 desired={group: requested})
-            outs += self._mode_events(now)
-        else:
-            self.authority.set_override_group(group, requested)
+        try:
+            if self.authority.base_mode != "MANUAL_OVERRIDE":
+                self.authority.enter_manual_override(operator=cmd.operator, reason=cmd.reason, now=now,
+                                                     ttl_s=self.site.manual_override_ttl_seconds,
+                                                     desired={group: requested})
+                outs += self._mode_events(now)
+            else:
+                self.authority.set_override_group(group, requested)
+        except ValueError as exc:  # defense in depth: never let a bad command reach the main loop
+            return self._gate_failure(group, GateResult(False, "INVALID_COMMAND", cmd, detail=str(exc)[:120]),
+                                      now, requested)
         desired, source = self.authority.arbitrate(group, self._auto(group), self._interlock_for(group))
         outs += self._apply(group, desired, "REMOTE" if source == "MANUAL_OVERRIDE" else source, cmd.reason,
                             cmd.command_id, now, operator=cmd.operator)
@@ -337,15 +352,19 @@ class SiteEngine:
             return self._gate_failure_mode(gate, now, requested)
         cmd = gate.command
         assert cmd is not None
-        if cmd.mode == "AUTO":
-            self.authority.return_to_auto(operator=cmd.operator, reason=cmd.reason, now=now)
-        elif cmd.mode == "MANUAL_OVERRIDE":
-            self.authority.enter_manual_override(operator=cmd.operator, reason=cmd.reason, now=now,
-                                                 ttl_s=cmd.ttl_seconds or self.site.manual_override_ttl_seconds,
-                                                 desired={})
-        else:
-            self.authority.enter_maintenance(operator=cmd.operator, reason=cmd.reason, now=now,
-                                             ttl_s=cmd.ttl_seconds)
+        try:
+            if cmd.mode == "AUTO":
+                self.authority.return_to_auto(operator=cmd.operator, reason=cmd.reason, now=now)
+            elif cmd.mode == "MANUAL_OVERRIDE":
+                self.authority.enter_manual_override(operator=cmd.operator, reason=cmd.reason, now=now,
+                                                     ttl_s=cmd.ttl_seconds or self.site.manual_override_ttl_seconds,
+                                                     desired={})
+            else:
+                self.authority.enter_maintenance(operator=cmd.operator, reason=cmd.reason, now=now,
+                                                 ttl_s=cmd.ttl_seconds)
+        except ValueError as exc:
+            return self._gate_failure_mode(GateResult(False, "INVALID_COMMAND", cmd, detail=str(exc)[:120]), now,
+                                           cmd.mode)
         result = {"result": "APPLIED"}
         self.gate.remember(cmd.command_id, result)
         payload = {"command_id": cmd.command_id, "site_id": self.site_id, "group": "mode", "requested_mode": cmd.mode,
@@ -415,7 +434,7 @@ class SiteEngine:
                 outs += self._apply(group, desired, source, reason, str(uuid.uuid4()), now)
             elif current.result != "APPLIED" and (now - gs["last_attempt"]).total_seconds() >= \
                     self.cfg.platform.command.retry_backoff_seconds:
-                outs += self._apply(group, desired, source, f"RETRY_{reason}", str(uuid.uuid4()), now)
+                outs += self._retry(group, desired, now)
             elif current.result != gs["result"]:
                 gs.update(result=current.result, members=current.members)
                 outs += [self._state_out(m, group, now) for m in self.site.actuator_groups[group]]
