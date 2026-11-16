@@ -29,7 +29,7 @@ from orchid.core.audit_chain import verify_chain  # noqa: E402
 
 SNAPSHOT_CODE = (
     "import sqlite3; s=sqlite3.connect('file:/data/historian.db?mode=ro', uri=True); "
-    "d=sqlite3.connect('/tmp/audit-snapshot.db'); s.backup(d); d.close(); print('ok')"
+    "d=sqlite3.connect('/data/audit-snapshot.db'); s.backup(d); d.close(); print('ok')"
 )
 
 
@@ -38,9 +38,9 @@ def snapshot(dest: Path) -> None:
     subprocess.run(["docker", "exec", "orchid-historian", "python", "-c", SNAPSHOT_CODE], check=True,
                    capture_output=True, env=env)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["docker", "cp", "orchid-historian:/tmp/audit-snapshot.db", str(dest)], check=True,
+    subprocess.run(["docker", "cp", "orchid-historian:/data/audit-snapshot.db", str(dest)], check=True,
                    capture_output=True, env=env)
-    subprocess.run(["docker", "exec", "orchid-historian", "rm", "-f", "/tmp/audit-snapshot.db"], check=False,
+    subprocess.run(["docker", "exec", "orchid-historian", "rm", "-f", "/data/audit-snapshot.db"], check=False,
                    capture_output=True, env=env)
 
 

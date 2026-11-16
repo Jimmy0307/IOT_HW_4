@@ -32,6 +32,7 @@ from orchid.historian.ratelimit import TokenBucket
 AUTH_FAIL_RE = re.compile(r"not authori[sz]ed|bad user name or password", re.IGNORECASE)
 ACL_DENY_RE = re.compile(r"denied (publish|subscribe)", re.IGNORECASE)
 SYS_METRICS = {
+    "$SYS/broker/uptime": "broker_uptime_s",  # republished every sys_interval -> liveness signal
     "$SYS/broker/clients/connected": "broker_clients_connected",
     "$SYS/broker/load/messages/received/1min": "broker_msgs_received_1min",
     "$SYS/broker/load/messages/sent/1min": "broker_msgs_sent_1min",
@@ -211,7 +212,7 @@ class Ingestor:
         key = SYS_METRICS.get(topic)
         if key:
             try:
-                value = float(text.strip())
+                value = float(text.strip().split()[0])
             except ValueError:
                 return
             self.db.set_metric(key, value, iso(self.now()))

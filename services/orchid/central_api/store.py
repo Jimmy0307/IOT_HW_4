@@ -178,7 +178,7 @@ class Store:
         counts = {r["event_type"]: r["n"] for r in self.q(
             "SELECT event_type, COUNT(*) AS n FROM events GROUP BY event_type")}
         cmd_counts = {r["status"]: r["n"] for r in self.q("SELECT status, COUNT(*) AS n FROM commands GROUP BY status")}
-        broker_row = metrics.get("broker_clients_connected")
+        broker_row = metrics.get("broker_uptime_s") or metrics.get("broker_clients_connected")
         broker_age = status.age_seconds(broker_row["updated_ts"], now) if broker_row else None
         hist_age = status.age_seconds(metrics["historian_heartbeat"]["value"], now) \
             if "historian_heartbeat" in metrics else None
@@ -189,7 +189,8 @@ class Store:
                        ("STALE" if broker_age is not None else "UNKNOWN"),
                        "clients_connected": m("broker_clients_connected", None),
                        "msgs_received_1min": m("broker_msgs_received_1min", None),
-                       "msgs_sent_1min": m("broker_msgs_sent_1min", None), "age_s": broker_age},
+                       "msgs_sent_1min": m("broker_msgs_sent_1min", None),
+                       "uptime_s": m("broker_uptime_s", None), "age_s": broker_age},
             "historian": {"connected": bool(m("historian_mqtt_connected", 0)), "heartbeat_age_s": hist_age},
             "sites_total": len(sites),
             "sites_connected": sum(1 for s in sites if s["status"] in ("ONLINE", "DEGRADED")),

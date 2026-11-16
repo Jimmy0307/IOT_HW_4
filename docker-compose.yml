@@ -16,7 +16,7 @@ services:
     volumes:
     - ./services/reverse-proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     - ./services/reverse-proxy/orchid_proxy_headers.conf:/etc/nginx/orchid_proxy_headers.conf:ro
-    - ./secrets/pki/reverse-proxy.crt:/run/orchid-secrets/tls.crt:ro
+    - ./secrets/pki/reverse-proxy-fullchain.crt:/run/orchid-secrets/tls.crt:ro
     - ./secrets/pki/reverse-proxy.key:/run/orchid-secrets/tls.key:ro
     - ./secrets/pki/ca.crt:/run/orchid-secrets/ca.crt:ro
     networks:

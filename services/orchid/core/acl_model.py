@@ -80,6 +80,7 @@ def central_principals(sites: list[str]) -> list[Principal]:
             subscribe=(
                 f"{R}/#",
                 "$SYS/broker/log/#",
+                "$SYS/broker/uptime",
                 "$SYS/broker/clients/connected",
                 "$SYS/broker/load/messages/received/1min",
                 "$SYS/broker/load/messages/sent/1min",

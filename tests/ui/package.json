@@ -1,0 +1,13 @@
+{
+  "name": "orchid-ui-qa",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Browser QA for the Orchid dashboard (Playwright library, screenshots into evidence/generated/ui)",
+  "scripts": {
+    "qa": "node ui_qa.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.65.1"
+  }
+}

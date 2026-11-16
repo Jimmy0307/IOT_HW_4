@@ -207,3 +207,10 @@ def test_retention_prunes_raw_but_never_audit(env, cfg):
     ing.retention_limits = {"raw_telemetry": 10}
     ing.prune()
     assert rows(db, "SELECT COUNT(*) AS n FROM raw_telemetry")[0]["n"] == 10
+
+
+def test_broker_uptime_is_liveness_metric(env):
+    ing, db, _ = env
+    ing.handle("$SYS/broker/uptime", b"1234 seconds")
+    row = rows(db, "SELECT value FROM metrics WHERE key='broker_uptime_s'")
+    assert row and float(row[0]["value"]) == 1234.0

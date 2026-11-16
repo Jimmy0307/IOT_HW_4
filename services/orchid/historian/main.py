@@ -31,7 +31,7 @@ SUBSCRIPTIONS = [
     ("orchid/v1/+/actuator/+/state", 1), ("orchid/v1/+/control/+/command", 1), ("orchid/v1/+/control/+/ack", 1),
     ("orchid/v1/+/gateway/heartbeat", 1), ("orchid/v1/+/gateway/bridge", 1), ("orchid/v1/+/alerts", 1),
     ("orchid/v1/+/events", 1), ("orchid/v1/central/audit", 1), ("$SYS/broker/log/#", 0),
-    ("$SYS/broker/clients/connected", 0), ("$SYS/broker/load/messages/received/1min", 0),
+    ("$SYS/broker/uptime", 0), ("$SYS/broker/clients/connected", 0), ("$SYS/broker/load/messages/received/1min", 0),
     ("$SYS/broker/load/messages/sent/1min", 0), ("$SYS/broker/load/connections/1min", 0),
 ]
 NORMAL_SUFFIXES = ("/telemetry/temperature", "/telemetry/humidity", "/state", "/events")

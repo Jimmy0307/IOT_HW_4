@@ -92,7 +92,7 @@ def render() -> dict:
         "ports": ["${ORCHID_HTTPS_BIND:-127.0.0.1}:${ORCHID_HTTPS_PORT:-8443}:8443"],
         "volumes": [ro("./services/reverse-proxy/nginx.conf", "/etc/nginx/conf.d/default.conf"),
                     ro("./services/reverse-proxy/orchid_proxy_headers.conf", "/etc/nginx/orchid_proxy_headers.conf"),
-                    ro(f"{S}/pki/reverse-proxy.crt", f"{SEC}/tls.crt"), ro(f"{S}/pki/reverse-proxy.key", f"{SEC}/tls.key"),
+                    ro(f"{S}/pki/reverse-proxy-fullchain.crt", f"{SEC}/tls.crt"), ro(f"{S}/pki/reverse-proxy.key", f"{SEC}/tls.key"),
                     ro(f"{S}/pki/ca.crt", f"{SEC}/ca.crt")],
         "networks": ["wan_net", "dmz_net"],
         "read_only": True,

@@ -119,6 +119,9 @@ def main(argv: list[str] | None = None) -> int:
     ca_key, ca_cert, ca_new = make_ca(args.force)
     reissue = args.force or ca_new  # leaves must chain to the current CA
     created = [n for n, s in server_identities().items() if make_leaf(n, s, ca_key, ca_cert, reissue)]
+    ca_pem = (PKI / "ca.crt").read_bytes()
+    for name in server_identities():  # leaf + CA, so clients can match the presented chain
+        (PKI / f"{name}-fullchain.crt").write_bytes((PKI / f"{name}.crt").read_bytes() + ca_pem)
     print(f"[pki] CA: {ca_cert.subject.rfc4514_string()} (valid until {ca_cert.not_valid_after_utc.date()})")
     print(f"[pki] server certificates created: {len(created)}; kept: {len(server_identities()) - len(created)}")
     print(f"[pki] output directory (gitignored): {PKI.relative_to(ROOT)}")
