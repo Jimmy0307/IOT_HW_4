@@ -157,6 +157,10 @@ class SiteEngine:
         return [self._heartbeat(now), *self._all_states(now),
                 self._event("CONTROLLER_STARTED", now, mode=self.authority.effective_mode())]
 
+    def republish(self, now: datetime) -> list[Out]:
+        """Retained ONLINE heartbeat + observed states (after every MQTT (re)connect)."""
+        return [self._heartbeat(now), *self._all_states(now)]
+
     def on_message(self, topic: str, raw: bytes, now: datetime) -> list[Out]:
         parsed = topics.parse(topic)
         if parsed is None or parsed.site != self.site_id:
