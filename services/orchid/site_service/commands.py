@@ -62,6 +62,14 @@ class GateResult:
     command: GroupCommand | ModeCommand | None = None
     previous: dict[str, Any] | None = None
     detail: str = ""
+    command_id: str | None = None  # best-effort id of an invalid command, so its ACK can be correlated
+
+
+def _uuid_or_none(value: Any) -> str | None:
+    try:
+        return str(uuid.UUID(value)) if isinstance(value, str) else None
+    except ValueError:
+        return None
 
 
 class CommandGate:
@@ -95,7 +103,8 @@ class CommandGate:
             cmd = model.model_validate(body)
         except ValidationError as exc:
             first = exc.errors()[0]
-            return GateResult(False, "INVALID_COMMAND", detail=f"{first.get('loc')}: {first.get('type')}")
+            return GateResult(False, "INVALID_COMMAND", detail=f"{first.get('loc')}: {first.get('type')}",
+                              command_id=_uuid_or_none(body.get("command_id")))
         issued, expires = parse_aware(cmd.issued_at), parse_aware(cmd.expires_at)
         if expires <= issued:
             return GateResult(False, "INVALID_COMMAND", cmd, detail="expires_at <= issued_at")

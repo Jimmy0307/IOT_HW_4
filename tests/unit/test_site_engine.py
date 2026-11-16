@@ -265,6 +265,7 @@ def test_blank_operator_or_reason_is_invalid_not_a_crash(h, field):
     cid = h.command("fan_group", "ON", **{field: "   "})
     ack = h.acks("fan_group")[-1]
     assert ack["result"] == "INVALID"
+    assert ack["command_id"] == cid  # correlatable with the central command record
     assert h.group_observed("fan_group")["fan01"] == "OFF"
     assert h.engine.snapshot(h.now)["mode"]["mode"] == "AUTO"
 

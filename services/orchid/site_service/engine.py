@@ -284,7 +284,7 @@ class SiteEngine:
                     requested: str | None = None) -> Out:
         cmd = gate.command
         payload: dict[str, Any] = {
-            "command_id": cmd.command_id if cmd else None, "site_id": self.site_id, "group": topic_group,
+            "command_id": cmd.command_id if cmd else gate.command_id, "site_id": self.site_id, "group": topic_group,
             "requested_state": requested, "result": result, "detail": detail, "source": "REMOTE",
             "mode": self.authority.effective_mode(), "acked_at": iso(now),
             "members": dict(self.groups[topic_group]["members"]) if topic_group in self.groups else {},
@@ -294,7 +294,7 @@ class SiteEngine:
         return Out(topics.group_ack(self.site_id, topic_group), payload, qos=1, retain=False)
 
     def _gate_failure(self, topic_group: str, gate: GateResult, now: datetime, requested: str | None) -> list[Out]:
-        cid = gate.command.command_id if gate.command else None
+        cid = gate.command.command_id if gate.command else gate.command_id
         if gate.code == "COMMAND_EXPIRED":
             return [self._reject_ack(topic_group, gate, "EXPIRED", "now > expires_at", now, requested),
                     self._event("COMMAND_EXPIRED", now, group=topic_group, command_id=cid)]
@@ -302,7 +302,7 @@ class SiteEngine:
             return [self._reject_ack(topic_group, gate, "DUPLICATE", "already processed", now, requested),
                     self._event("COMMAND_DUPLICATE", now, group=topic_group, command_id=cid)]
         return [self._reject_ack(topic_group, gate, "INVALID", gate.detail[:120], now, requested),
-                self._event("COMMAND_INVALID", now, group=topic_group, detail=gate.detail[:120])]
+                self._event("COMMAND_INVALID", now, group=topic_group, command_id=cid, detail=gate.detail[:120])]
 
     def _on_group_command(self, group: str, raw: bytes, now: datetime) -> list[Out]:
         self.counters["commands"] += 1
