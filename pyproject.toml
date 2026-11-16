@@ -11,4 +11,5 @@ addopts = "-ra --strict-markers"
 markers = [
     "stack: requires the running docker compose lab (python scripts/verify_all.py starts it)",
     "slow: long-running failure/fault-injection scenario",
+    "gate(id, title): acceptance gate covered by this test (evidence written to evidence/generated/<id>)",
 ]

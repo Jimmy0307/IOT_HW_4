@@ -41,3 +41,42 @@ def telemetry_bytes(**overrides) -> bytes:
     }
     base.update(overrides)
     return json.dumps(base).encode()
+
+
+# ---------------------------------------------------------------- stack test plumbing
+import os  # noqa: E402
+
+STACK = os.environ.get("ORCHID_STACK") == "1"
+
+
+def pytest_collection_modifyitems(config, items):
+    if STACK:
+        return
+    skip = pytest.mark.skip(reason="stack test: run via `python scripts/verify_all.py` (ORCHID_STACK=1)")
+    for item in items:
+        if "stack" in item.keywords:
+            item.add_marker(skip)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    setattr(item, f"rep_{rep.when}", rep)
+
+
+@pytest.fixture()
+def evidence(request):
+    from tests import lab
+
+    marker = request.node.get_closest_marker("gate")
+    gate, title = (marker.args[0], marker.args[1]) if marker else (request.node.name, request.node.name)
+    ev = lab.Evidence(f"{gate}-{request.node.name}"[:80] if marker is None else gate, title)
+    lab.set_current(ev)
+    yield ev
+    rep = getattr(request.node, "rep_call", None)
+    result = "PASS" if rep is not None and rep.passed else ("FAIL" if rep is not None else "INCONCLUSIVE")
+    if rep is not None and rep.failed:
+        ev.note(str(rep.longrepr)[-1500:])
+    ev.write(result)
+    lab.set_current(None)
