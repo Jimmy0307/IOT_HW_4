@@ -1,0 +1,141 @@
+# Security Model
+
+Scope: a local Docker lab. All security testing targets only this project's containers and
+networks. Nothing is exposed beyond `127.0.0.1:8443`.
+
+## 1. Assets
+
+| Asset | Why it matters |
+|---|---|
+| Greenhouse actuation (fans, dehumidifiers) | wrong/forged/stale commands damage crops; control must survive central loss |
+| Sensor data integrity | AUTO control acts on it; forged/invalid data must never drive outputs |
+| Control authority (mode, override) | an override must be attributable, bounded in time and outranked by safety |
+| Audit trail | after-the-fact accountability; must be tamper-evident |
+| Credentials and keys | MQTT passwords, JWT key, audit HMAC key, TLS private keys |
+| Dashboard truthfulness | operators must not see stale state as current |
+
+## 2. Trust boundaries
+
+TB1 host/WAN -> DMZ, TB2 DMZ -> central OT, TB3 site -> central bridge, TB4 central -> site
+commands, TB5 field device -> site broker, TB6 payload content (telemetry/commands/logs are
+untrusted until they pass their own gate), TB7 loopback-only fault interface. See
+`ARCHITECTURE.md` section 5.
+
+## 3. Threat model (STRIDE, lab scope)
+
+| Threat | Example | Mitigation | Verified |
+|---|---|---|---|
+| Spoofing a device/site | connect as another principal or with another principal's client id; publish into another site's namespace | per-principal credentials (dynsec, PBKDF2-SHA512) bound to client ids, deny-by-default ACL, concrete per-site bridge grants, payload/topic/registration identity triple check, ACKs cannot set command provenance | G06-G09, G11 (identity_spoof) |
+| Spoofing the server | MITM on MQTT/HTTPS | TLS 1.2+ with lab CA, SAN-checked hostnames, no insecure flags anywhere | G05, G03 |
+| Tampering with telemetry | NaN, "20abc", wrong unit, replayed seq, 200 C, spike, frozen | data trust pipeline RAW->NORMALIZED->VALIDATED; only VALIDATED drives control; N-of-M | G11-G13 |
+| Tampering with commands | stale command replayed after reconnect; duplicate delivery; malformed operator input | MQTT Message Expiry + app `expires_at`; bounded session; dedup cache persisted across restarts; blank/invalid fields -> INVALID ACK (never an exception in the control loop) | G18, G19, G19b |
+| Tampering with audit | edit/delete audit rows | append-only triggers + HMAC chain with key outside the DB | G30 |
+| Repudiation | "who turned the fans off?" | operator identity from JWT in command + OPERATOR_COMMAND audit (principal central-api) + site MODE_CHANGED events | G26a, G21 |
+| Info disclosure | secrets in repo/logs/evidence | file-based secrets (gitignored) mounted read-only, never in env vars or process arguments (broker healthcheck uses a 0600 options file), redacting logger, exact-value secret scan over repo + git history + evidence + container logs | G31 |
+| Log injection / stored XSS | CRLF, ANSI, `<script>` in device events | escape CR/LF/C0/C1/bidi; JSON-only logs; React text nodes, no HTML sinks; strict CSP | G25, G26 |
+| Forged authority in logs | device claims `principal=admin`, `severity=INFO` | claims dropped and recorded; server binds principal (ACL-derived), site (topic), ingest_ts, severity (policy) | G27 |
+| DoS | log flood, oversized packets, deep JSON | per-site token buckets (normal/critical/server lanes), bounded queues, max_packet_size, size/depth limits, docker log rotation, retention | G28, G32 |
+| Elevation | viewer issues commands; `alg=none` JWT | RBAC dependency on every write route; PyJWT with fixed HS256, required claims, iss/aud | unit + G26a |
+| Safety bypass | remote OFF during overheating | HARD_SAFETY_INTERLOCK outranks every remote/override path | G20 |
+
+## 4. Authentication
+
+* **MQTT**: Mosquitto Dynamic Security, `allow_anonymous false`, 27 production principals (+9
+  test-only `probe-*`), random 192-bit passwords stored as `$7$` PBKDF2-SHA512 (20000 iterations,
+  64-byte salt). One principal per device, controller, bridge and central service, each **bound
+  to a fixed client id** (prevents session takeover with a stolen credential).
+* **Web**: two local users (viewer/operator), PBKDF2-SHA256 (210000 iterations); HS256 JWT,
+  TTL 900 s, claims `sub, role, iat, nbf, exp, jti, iss, aud` all required; login rate limit
+  10/min per client (API) plus nginx `limit_req`.
+
+## 5. Authorization
+
+* MQTT default ACL access **deny** for all four access types; explicit grants only (see
+  `docs/MQTT_CONTRACT.md` section 4). No dynsec admin client -> ACLs cannot be changed at runtime
+  over MQTT (changes = edit `acl_model.py`, re-run bootstrap, restart brokers).
+* Web: viewer = read; operator = read + commands + mode. Authorization failures are audited
+  (`AUTHZ_DENIED`).
+* Site controller additionally enforces mode rules (MAINTENANCE/FAILSAFE reject remote group
+  commands; interlock rejects a remote fan OFF).
+
+## 6. TLS
+
+* Local lab CA (ECDSA P-256, 365 d) and server certificates (180 d) for central-broker,
+  site01..06-broker and reverse-proxy, each with correct SAN; generated by
+  `scripts/generate_certs.py` (Python `cryptography`, cross-platform).
+* All MQTT clients: `CERT_REQUIRED`, `check_hostname=True`, minimum TLS 1.2; bridges use
+  `bridge_cafile` + `bridge_insecure false`. There is no code path that disables verification.
+* Reverse proxy presents leaf + CA chain. Human browsers must import `secrets/pki/ca.crt` to
+  trust the lab CA; the automated browser QA pins the lab CA's SPKI for its own instance only.
+
+## 7. Sensor trust
+
+Separate concepts: **capability range** (sensor validity: temperature -10..50 C *lab
+assumption*; humidity 0..100 %RH physical domain) vs **operational thresholds** (target 20 C /
+60 %RH with hysteresis bands 19.5-20.5 C / 58-62 %RH). Validation order: size/encoding/depth ->
+schema/type (strict) -> finite -> identity (payload = topic = registration) -> unit -> range ->
+future timestamp -> sequence -> freshness (10 s) -> rate of change (2 C/s, 10 %RH/s) with
+3-sample step confirmation -> frozen signal (30 s identical). Control requires 3 of the last 5
+fresh VALIDATED samples beyond a threshold. All numbers are configurable lab assumptions in
+`config/platform.yaml`.
+
+## 8. Log security
+
+Pipeline (historian `ingest.py`): registered device/metric check for telemetry/state topics -> size limit 4096 B -> depth limit 4 -> JSON object -> event_id
+format -> event_type allowlist (server-only types like RATE_LIMITED/LOGIN_SUCCESS cannot be
+emitted by sites) -> drop+record claimed authoritative fields -> neutralize control characters
+-> bound detail keys/length -> bind principal/site/ingest_ts/severity server-side -> dedup
+(LRU + UNIQUE(site,event_id)) -> rate limit -> `events` + HMAC chained `audit_log`.
+
+Severity is assigned only by `historian/policy.py`. Rate limiting: token buckets keyed by
+(principal, site, class) - so a flooding site cannot starve central-api operator audit records -
+with three classes (normal 5/s burst 20; critical 50/s burst 200; server-generated security
+records 5/s burst 50),
+drops are counted and summarized every 10 s as an exempt `RATE_LIMITED` record. The historian's
+inbound queue has a critical lane (alerts, audit, commands, acks, health, broker log) drained
+before the normal lane (telemetry, state, events).
+
+Audit chain: `hmac_i = HMAC-SHA256(key, hmac_{i-1} || "|" || canonical(event_i))`, verified at
+startup, incrementally every 30 s (new rows only, from a verified checkpoint), fully every 10 min
+(dashboard "audit integrity"), and on demand by
+`scripts/verify_audit_chain.py`. **Tamper evidence != tamper prevention**: whoever controls the
+DB file can still modify it; the modification is detectable, not prevented. Truncation of the
+newest rows is only detectable against an externally recorded head (the verifier prints row
+count and head prefix for that purpose).
+
+## 9. Resource limits
+
+See `docs/MQTT_CONTRACT.md` section 6 for broker limits. Application limits: telemetry 1 KiB,
+commands 2 KiB, events 4 KiB, JSON depth 4, API body 16 KiB (nginx), historian queues 2000/5000,
+controller inbound queue 5000, paho offline buffer 2000, retention: raw 50k rows, gateway 200k,
+events 50k (audit never pruned). Containers: read-only root FS, `cap_drop: ALL`
+(brokers add only CHOWN/SETUID/SETGID/DAC_OVERRIDE/FOWNER for the entrypoint),
+`no-new-privileges`, memory and PID limits, json-file logs 3x5 MB.
+
+## 10. Residual risks (accepted for the lab, documented)
+
+1. **Attribution below the bridge**: central sees the bridge identity (`bridge-siteNN`); only the
+   site controller may publish site events/alerts, but central cannot cryptographically tell the
+   controller from a compromised site broker. Per-device attribution needs end-to-end signing.
+2. **Commands are not end-to-end signed**: trust = TLS + ACL topic binding. A compromised
+   central-api could issue commands; impact bounded by expiry, mode rules and the local
+   interlock.
+3. **ACL denials are enforced but not logged** by Mosquitto 2.1.2 at info level; the dashboard
+   shows broker auth failures (from `$SYS/broker/log`) and application-level policy denials.
+4. Site broker auth failures are only in that broker's container log (not forwarded centrally).
+5. Device identity is username/password over TLS (no client certificates / mTLS).
+6. SQLite single node; central-api mounts the historian volume read-write but opens the DB with
+   `mode=ro`.
+7. The `health` healthcheck principal (read-only `$SYS/broker/uptime`) shares one password
+   across brokers; its password is in a 0600 options file inside each broker container.
+8. JWT is kept in `sessionStorage` (mitigated by CSP `script-src 'self'` and no HTML sinks).
+9. Thresholds and plausibility limits are lab assumptions, not agronomic or datasheet values.
+10. Actuators are simulated relays; real hardware would need interlocks in hardware as well.
+11. JWTs are not revocable within their 15-minute TTL (role is not re-read per request).
+12. The viewer role can read security/audit event details (usernames, client IPs) - the
+    monitoring role is intended to see the security view.
+13. Another container on `dmz_net` could reach `central-api:8000` directly and bypass nginx rate
+    limits (only the static frontend shares that network).
+14. `probe-*` test principals exist in the lab dynsec configs (test-profile credentials only);
+    production bootstrap should use `--no-test-principals`.
+15. Command expiry relies on site and central clocks being roughly synchronized (lab: one host).

@@ -110,6 +110,15 @@ def main() -> int:
         ev = "<br>".join(f"`{e}`" for e in r["evidence"])
         note = "UI + API" if any("ui" in e for e in r["evidence"]) else ""
         lines.append(f"| {r['gate']} | {r['requirement']} | {r['method']} | **{r['result']}** | {ev} | {note} |")
+    extra = []
+    for folder in sorted(GEN.glob("g*")):
+        doc = load_json(folder / "result.json")
+        gate = str(doc.get("gate", ""))
+        if doc and gate and gate not in {g[0] for g in GATES}:
+            extra.append(f"| {gate} | {doc.get('title')} | **{doc.get('result')}** | `evidence/generated/{folder.name}/` |")
+    if extra:
+        lines += ["", "## Supplementary checks (beyond the 34 core gates)", "",
+                  "| Check | Title | Result | Evidence |", "|---|---|---|---|", *extra]
     lines += ["", "## Automated suites", "",
               "| Suite | Location | Runs in |", "|---|---|---|",
               "| Unit (pure logic, no Docker) | `tests/unit/` | `pytest tests/unit` |",
