@@ -30,7 +30,7 @@ siteNN-broker <--MQTT5+TLS--> siteNN-controller, siteNN-sim       (one isolated 
 Details: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`docs/MQTT_CONTRACT.md`](docs/MQTT_CONTRACT.md) ·
 [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md) · [`docs/RUNBOOK.md`](docs/RUNBOOK.md) ·
 [`docs/TEST_MATRIX.md`](docs/TEST_MATRIX.md) · [`docs/FINAL_ACCEPTANCE_REPORT.md`](docs/FINAL_ACCEPTANCE_REPORT.md) ·
-[`docs/TEACHER_REQUIREMENTS_TRACEABILITY.md`](docs/TEACHER_REQUIREMENTS_TRACEABILITY.md) · [`docs/TEAMMATE_DEMO_GUIDE.md`](docs/TEAMMATE_DEMO_GUIDE.md) ·
+[`docs/TEACHER_REQUIREMENTS_TRACEABILITY.md`](docs/TEACHER_REQUIREMENTS_TRACEABILITY.md) · [`docs/NETWORK_SECURITY_REPORT_GUIDE.md`](docs/NETWORK_SECURITY_REPORT_GUIDE.md) · [`docs/TEAMMATE_DEMO_GUIDE.md`](docs/TEAMMATE_DEMO_GUIDE.md) ·
 [`evidence/report/README.md`](evidence/report/README.md)
 
 ## Requirements
