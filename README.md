@@ -29,7 +29,9 @@ siteNN-broker <--MQTT5+TLS--> siteNN-controller, siteNN-sim       (one isolated 
 ```
 Details: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`docs/MQTT_CONTRACT.md`](docs/MQTT_CONTRACT.md) ·
 [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md) · [`docs/RUNBOOK.md`](docs/RUNBOOK.md) ·
-[`docs/TEST_MATRIX.md`](docs/TEST_MATRIX.md) · [`docs/FINAL_ACCEPTANCE_REPORT.md`](docs/FINAL_ACCEPTANCE_REPORT.md)
+[`docs/TEST_MATRIX.md`](docs/TEST_MATRIX.md) · [`docs/FINAL_ACCEPTANCE_REPORT.md`](docs/FINAL_ACCEPTANCE_REPORT.md) ·
+[`docs/TEACHER_REQUIREMENTS_TRACEABILITY.md`](docs/TEACHER_REQUIREMENTS_TRACEABILITY.md) · [`docs/TEAMMATE_DEMO_GUIDE.md`](docs/TEAMMATE_DEMO_GUIDE.md) ·
+[`evidence/report/README.md`](evidence/report/README.md)
 
 ## Requirements
 
@@ -41,6 +43,14 @@ Details: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`docs/MQTT_CONTRACT.md`](docs/
 | Container images | eclipse-mosquitto 2.1.2-alpine, python 3.12.8-slim, nginx-unprivileged 1.27-alpine, node 22.12-alpine |
 
 No host `openssl` is needed (certificates are generated with Python `cryptography`).
+
+### Verified ARM64 classroom/demo host
+
+The stack was also deployed successfully on a Seeed Studio / NVIDIA Tegra `aarch64` host:
+Ubuntu 20.04.6 LTS, Linux 5.10.192-tegra, Docker Engine 24.0.5. The application runtime remains
+containerized (Python 3.12.8 / Mosquitto 2.1.2 / Node 22 / nginx-unprivileged), so the host's
+Python 3.8.10 is not the application runtime. See `docs/TEAMMATE_DEMO_GUIDE.md` for the Linux
+bind-mount ACL note and the exact demo procedure.
 
 ## Quick start
 
