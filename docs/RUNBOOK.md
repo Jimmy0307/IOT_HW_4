@@ -71,7 +71,39 @@ docker compose --profile test down        # stop, keep data
 docker compose --profile test down -v     # stop and delete volumes
 ```
 
-## 7. Troubleshooting
+## 7. Linux / ARM64 / Seeed Studio deployment
+
+The same stack has been verified on a Seeed Studio / NVIDIA Tegra ARM64 host.
+
+Linux bind mounts preserve host UID/mode. The Python application containers run as UID `10001`
+and nginx-unprivileged uses UID `101`. If the generated secrets remain mode `0600`, grant
+those container UIDs read-only ACL access instead of making the files world-readable:
+
+```bash
+docker run --rm \
+  -v "$PWD/secrets:/secrets" \
+  alpine:3.20 \
+  sh -lc '
+    apk add --no-cache acl >/dev/null &&
+    setfacl -R -m u:10001:rX,u:101:rX /secrets
+  '
+
+docker compose restart
+sleep 20
+docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+curl -k https://localhost:8443/api/health
+```
+
+Expected health response:
+
+```json
+{"status":"ok","mqtt_connected":true}
+```
+
+Do **not** solve this by making private keys/password files world-readable. The ACL keeps
+host-side access restricted while allowing the non-root container UIDs to read the bind mounts.
+
+## 8. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
