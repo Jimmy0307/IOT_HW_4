@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: assignment4-full-verification
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   verify:
@@ -82,6 +82,33 @@ jobs:
         run: |
           set -euxo pipefail
           python scripts/bootstrap_secrets.py
+
+      - name: Grant least-privilege secret read ACLs for Linux containers
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq acl
+
+          # Python runtime is USER 10001 in services/Dockerfile.
+          # Keep generated secrets mode 0600; grant only the container UID read/traverse ACLs.
+          sudo setfacl -m u:10001:--x secrets
+          sudo setfacl -m u:10001:r-x secrets/mqtt secrets/app
+          sudo setfacl -R -m u:10001:rX secrets/mqtt secrets/app
+          sudo setfacl -m u:10001:--x secrets/pki
+          sudo setfacl -m u:10001:r-- secrets/pki/ca.crt
+
+          # Resolve the unprivileged nginx UID from the exact proxy image, then grant only
+          # the certificate/key files it must read.
+          PROXY_UID="$(docker run --rm --entrypoint sh nginxinc/nginx-unprivileged:1.27-alpine -c 'id -u')"
+          sudo setfacl -m "u:${PROXY_UID}:--x" secrets
+          sudo setfacl -m "u:${PROXY_UID}:--x" secrets/pki
+          sudo setfacl -m "u:${PROXY_UID}:r--"             secrets/pki/ca.crt             secrets/pki/reverse-proxy.key             secrets/pki/reverse-proxy-fullchain.crt
+
+          echo "Python container secret ACL sample:"
+          getfacl -p secrets/mqtt/central-api.pw | sed -n '1,20p'
+          echo "Reverse proxy key ACL sample:"
+          getfacl -p secrets/pki/reverse-proxy.key | sed -n '1,20p'
 
       - name: Run full fresh verification
         id: verify
