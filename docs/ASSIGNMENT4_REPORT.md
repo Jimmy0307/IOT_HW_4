@@ -167,26 +167,30 @@ Dashboard（React，HTTPS）有三個畫面：
 
 驗證方式：`python scripts/verify_all.py --fresh` 一鍵完成「設定檢查 → 單元測試 → 前端建置/測試 →
 Docker 建置 → 等待 23 個服務健康 → 實機整合/安全/故障注入測試 → Playwright 瀏覽器測試 →
-稽核鏈驗證 → secret 掃描 → 驗收矩陣」。以下為最後一次**完整執行**（run 4）的實際結果：
+稽核鏈驗證 → secret 掃描 → 驗收矩陣」。
 
-| 項目 | 結果 |
+最終 canonical fresh verification 已在 GitHub Actions 的乾淨 Linux runner 上完成：
+
+| 項目 | 最終結果 |
 |---|---|
-| 單元測試 | 192 / 192 通過 |
-| 前端（vitest + 安全靜態掃描 + 正式建置） | 74 / 74 通過、0 個危險寫法、建置成功 |
-| 實機測試（整合 + 安全 + 故障注入） | 30 / 31 通過 |
-| 瀏覽器 QA（Playwright，實際操作 Dashboard） | 12 / 12 通過，9 張截圖 |
-| 稽核鏈驗證 | PASS（207 筆）；竄改副本 FAIL 並指出第 5 筆、刪除副本 FAIL 並指出第 3 筆 |
-| Secret 掃描 | CLEAN（49 個實際密鑰值 × repo、整個 git 歷史、證據、24 個容器日誌） |
-| 34 項核心驗收 | **33 PASS / 1 FAIL / 0 INCONCLUSIVE** |
+| 核心驗收 | **34 / 34 PASS** |
+| FAIL | **0** |
+| INCONCLUSIVE | **0** |
+| Browser QA | **PASS** |
+| Unit tests | PASS |
+| Frontend tests / production build | PASS |
+| 23-service health | PASS |
+| Integration / security / failure stack tests | PASS |
+| Audit-chain verification | PASS |
+| Secret scan | **CLEAN** |
 
-唯一未通過的是 G34「整體測試全部通過」，原因是我額外加的補充測試 G19b：送出 reason 只有空白的指令時，
-控制器**沒有當機**（已實機確認），但回覆的 INVALID ACK 沒有帶 command_id，中央無法對應原指令。
-此問題已在 commit `0836663` 修正並有單元測試；完整重跑因主機記憶體不足被系統中止，尚待重跑確認。
-逐項結果見 `docs/FINAL_ACCEPTANCE_REPORT.md` 與 `docs/TEST_MATRIX.md`。
+先前唯一的 G34 blocker（空白 reason 的 INVALID ACK 沒帶回原 command_id）已在 commit `0836663` 修正，
+並由補充驗證 G19b 與完整 fresh run 確認通過。最終結果以 `docs/TEST_MATRIX.md` 與
+`docs/FINAL_ACCEPTANCE_REPORT.md` 為準。
 
-另外，兩位獨立審查者（資安、程式正確性）在不知道我結論的情況下審查程式碼，
-找到的所有 HIGH / MEDIUM 問題（例如：空白 reason 會讓控制器當機、MQTT client id 可被搶占、
-ACK 可偽造操作者）都已修正並重新驗證。
+此外，同一套 Docker stack 已於 Seeed Studio / NVIDIA Tegra **ARM64** Linux 主機實際部署，
+23 個服務全數 healthy，`/api/health` 回傳 `{"status":"ok","mqtt_connected":true}`。
+ARM64 主機上的 Linux bind-mount 權限差異以 POSIX ACL 處理，未降低 secret 的 host-side 保護。
 
 ## 13. 攻擊 / 異常防呆（實際做過的注入）
 
