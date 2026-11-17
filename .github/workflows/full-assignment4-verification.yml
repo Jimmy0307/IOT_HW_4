@@ -24,6 +24,7 @@ jobs:
     env:
       PYTHONUTF8: "1"
       CI: "true"
+      ORCHID_EPHEMERAL_BIND_SECRET_MODE: "1"
 
     steps:
       - name: Checkout exact branch
@@ -84,6 +85,8 @@ jobs:
           free -h || true
           df -h || true
           docker system df || true
+          echo "=== compose status ==="
+          docker compose ps -a || true
           echo "=== gate summary ==="
           if [ -f evidence/generated/gate_summary.json ]; then
             cat evidence/generated/gate_summary.json
