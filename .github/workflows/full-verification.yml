@@ -1,0 +1,171 @@
+name: Full Assignment4 Verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/assignment4-orchid-mqtt
+    paths:
+      - ".github/workflows/full-verification.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: assignment4-full-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Fresh 34-gate closure
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Free runner disk space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Before cleanup"
+          df -h /
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          docker system prune -af || true
+          echo "After cleanup"
+          df -h /
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install host dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          cd services/frontend
+          npm ci --no-audit --no-fund
+          cd ../../tests/ui
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Runner preflight
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python --version
+          node --version
+          npm --version
+          docker version
+          docker compose version
+          free -h
+          df -h /
+          git rev-parse HEAD
+          git status --short
+
+      - name: Bootstrap ephemeral lab secrets
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python scripts/bootstrap_secrets.py
+
+      - name: Run full fresh verification
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/verify_all.py --fresh 2>&1 | tee ci_verify.log
+          status=${PIPESTATUS[0]}
+          echo "exit_code=${status}" >> "${GITHUB_OUTPUT}"
+          exit "${status}"
+
+      - name: Capture runner diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p evidence/generated/ci
+          {
+            echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "sha=${GITHUB_SHA}"
+            echo
+            echo "=== memory ==="
+            free -h
+            echo
+            echo "=== disk ==="
+            df -h /
+            echo
+            echo "=== docker disk ==="
+            docker system df || true
+            echo
+            echo "=== compose ps ==="
+            docker compose --profile test ps || true
+          } > evidence/generated/ci/runner_diagnostics.txt
+
+      - name: Assert 34/34 acceptance closure
+        if: always()
+        shell: bash
+        env:
+          VERIFY_EXIT_CODE: ${{ steps.verify.outputs.exit_code }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          exit_code = os.environ.get("VERIFY_EXIT_CODE", "")
+          summary_path = pathlib.Path("evidence/generated/gate_summary.json")
+          if not summary_path.exists():
+              print("FAIL: gate_summary.json was not produced")
+              sys.exit(1)
+
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
+          passed = int(summary.get("passed", -1))
+          failed = int(summary.get("failed", -1))
+          inconclusive = int(summary.get("inconclusive", -1))
+          browser = summary.get("browser_qa")
+
+          print(f"verify_exit_code={exit_code}")
+          print(f"gates={passed} PASS / {failed} FAIL / {inconclusive} INCONCLUSIVE")
+          print(f"browser_qa={browser}")
+
+          if exit_code != "0":
+              print("FAIL: verify_all.py did not exit cleanly")
+              sys.exit(1)
+          if (passed, failed, inconclusive) != (34, 0, 0):
+              print("FAIL: acceptance closure is not 34/34 PASS")
+              sys.exit(1)
+
+          print("ASSIGNMENT4_IMPLEMENTATION_COMPLETE")
+          PY
+
+      - name: Upload final verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assignment4-verification-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            ci_verify.log
+            evidence/generated/**
+            docs/FINAL_ACCEPTANCE_REPORT.md
+            docs/TEST_MATRIX.md
+            docs/ASSIGNMENT4_REPORT.md
+            ARCHITECTURE.md
+            README.md
