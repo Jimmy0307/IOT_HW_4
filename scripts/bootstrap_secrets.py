@@ -50,6 +50,27 @@ def _write_private(path: Path, data: str | bytes) -> None:
         pass
 
 
+def _apply_ephemeral_bind_mount_compatibility() -> None:
+    """Make bind-mounted secrets readable by non-root containers on an ephemeral POSIX CI host.
+
+    Normal/local behavior remains mode 0600. This opt-in exists because Linux bind mounts
+    preserve host UID/mode, while the Python runtime intentionally runs as UID 10001.
+    Use only on disposable single-tenant runners; secret values are still gitignored and
+    must never be uploaded as artifacts.
+    """
+    if os.environ.get("ORCHID_EPHEMERAL_BIND_SECRET_MODE") != "1" or os.name != "posix":
+        return
+    for path in SECRETS.rglob("*"):
+        try:
+            if path.is_dir():
+                os.chmod(path, 0o755)
+            elif path.is_file():
+                os.chmod(path, 0o644)
+        except OSError as exc:
+            raise RuntimeError(f"failed to prepare ephemeral bind-mounted secret: {path}") from exc
+    print("[secrets] ephemeral POSIX bind-mount compatibility enabled (permissions only; values not printed)")
+
+
 def _ensure(path: Path, factory, rotate: bool) -> tuple[str, bool]:
     if path.exists() and not rotate:
         return path.read_text(encoding="utf-8").strip(), False
@@ -138,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[secrets] jwt_secret: {'created' if jwt_new else 'kept'}; audit_hmac_key: "
           f"{'created' if hmac_new else 'kept'}; web users: {'created' if web_new else 'kept'}")
     print(f"[secrets] dashboard logins written to {creds_path.relative_to(ROOT)} (not printed)")
+    _apply_ephemeral_bind_mount_compatibility()
     return 0
 
 
