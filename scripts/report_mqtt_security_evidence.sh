@@ -90,14 +90,14 @@ for target in ("central-broker", "site02-broker"):
         s.close()
         result = "REACHABLE"
     except Exception as exc:
-        result = type(exc).__name__
+        result = "ISOLATED:" + type(exc).__name__
     print(json.dumps({"source":"site01-controller","target":f"{target}:8883","result":result}))
 PY
 
 printf '\n[12] BROKER / BRIDGE PROTOCOL CONFIG — NO WILDCARD # BRIDGE\n'
 printf 'site01 bridge configuration (selected security lines):\n'
 docker compose exec -T site01-broker sh -lc \
-  "grep -E '^(bridge_protocol_version|bridge_cafile|bridge_insecure|topic orchid/v1/)' /mosquitto/config/mosquitto.conf 2>/dev/null || true"
+  "grep -E '^(bridge_protocol_version|bridge_cafile|bridge_insecure|topic orchid/v1/)' /mosquitto/runtime/mosquitto.conf 2>/dev/null || true"
 
 printf '\n============================================================\n'
 printf ' EXPECTED SECURITY SIGNALS\n'
